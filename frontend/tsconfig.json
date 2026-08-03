@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@tauri-apps/api/core": ["./src/lib/wails-shim/core.ts"],
+      "@tauri-apps/api/event": ["./src/lib/wails-shim/event.ts"],
+      "@tauri-apps/api/window": ["./src/lib/wails-shim/window.ts"],
+      "@tauri-apps/api/webview": ["./src/lib/wails-shim/webview.ts"],
+      "@tauri-apps/api/webviewWindow": ["./src/lib/wails-shim/webviewWindow.ts"],
+      "@tauri-apps/api/path": ["./src/lib/wails-shim/path.ts"],
+      "@tauri-apps/api/app": ["./src/lib/wails-shim/app.ts"],
+      "@tauri-apps/plugin-os": ["./src/lib/wails-shim/plugin-os.ts"],
+      "@tauri-apps/plugin-store": ["./src/lib/wails-shim/plugin-store.ts"],
+      "@tauri-apps/plugin-notification": ["./src/lib/wails-shim/plugin-notification.ts"],
+      "@tauri-apps/plugin-clipboard-manager": ["./src/lib/wails-shim/plugin-clipboard.ts"],
+      "@tauri-apps/plugin-opener": ["./src/lib/wails-shim/plugin-opener.ts"],
+      "@tauri-apps/plugin-autostart": ["./src/lib/wails-shim/plugin-autostart.ts"],
+      "@tauri-apps/plugin-process": ["./src/lib/wails-shim/plugin-process.ts"],
+      "@tauri-apps/plugin-updater": ["./src/lib/wails-shim/plugin-updater.ts"],
+      "#wails/runtime/runtime": ["./src/lib/wails-shim/wails-runtime-stub.ts"],
+      "#wails/runtime/window": ["./src/lib/wails-shim/wails-runtime-window-stub.ts"],
+      "#wails/go/models": ["./wailsjs/go/models.ts"]
+    }
+  },
+  "include": ["src", "wailsjs"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

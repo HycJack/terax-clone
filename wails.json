@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "terax",
+  "outputfilename": "terax-clone",
+  "frontend:install": "pnpm install --prefer-offline --no-optional",
+  "frontend:build": "pnpm build",
+  "frontend:dev:watcher": "pnpm dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "HycJack",
+    "email": "772403255@qq.com"
+  }
+}

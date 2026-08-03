@@ -1,0 +1,76 @@
+# ===== Go / Wails =====
+# Compiled binary outputs
+/build/
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Wails build output (the generated application bundle)
+/build/bin/
+/build/windows/
+/build/darwin/
+/build/linux/
+
+# Wails generated frontend bindings are committed (they're part of the
+# API surface the frontend imports), but the generated application assets
+# under frontend/dist are NOT committed — they're rebuild artifacts.
+/frontend/dist/
+
+# ===== Node / Frontend =====
+node_modules/
+/frontend/node_modules/
+/frontend/dist/
+
+# TypeScript build info / generated config artifacts
+*.tsbuildinfo
+/frontend/vite.config.d.ts
+/frontend/vite.config.js
+/frontend/package.json.md5
+
+# Vite temp / cache
+.vite/
+*.local
+
+# ===== IDE / Editor =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== OS =====
+.DS_Store
+ehthumbs.db
+Desktop.ini
+
+# ===== Secrets / local config =====
+# Never commit API keys, tokens, or local-only config
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets.json
+
+# ===== Python (temp analysis scripts) =====
+__pycache__/
+*.pyc
+*.pyo
+audit_report.txt
+audit_return_types.py
+check_fields.py
+
+# ===== Logs / temp =====
+*.log
+logs/
+tmp/
+temp/
+
+# ===== Go workspace / vendor (optional) =====
+# Uncomment if you vendor dependencies
+# vendor/
