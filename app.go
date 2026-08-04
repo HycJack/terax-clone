@@ -315,9 +315,6 @@ func (a *App) PtyOpen(args PtyOpenArgs) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	// Debug: send a test event to verify Go→JS event bus works
-	a.eventsEmit(a.ctx, "test:handshake", "hello from Go")
-	fmt.Printf("[terax-debug] EventsEmit called via eventsEmit field\n")
 	return s.ID, nil
 }
 
@@ -348,11 +345,6 @@ func (a *App) PtyResize(args PtyResizeArgs) error {
 func (a *App) PtyClose(id int) error {
 	a.ptyMgr.Close(id)
 	return nil
-}
-
-// PtyReadOutput returns any accumulated PTY output since last call.
-func (a *App) PtyReadOutput(id int) []byte {
-	return a.ptyMgr.ReadOutput(id)
 }
 
 // PtyCloseAll kills every PTY session.

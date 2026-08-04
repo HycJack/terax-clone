@@ -15,40 +15,6 @@ export type PtySession = {
   close: () => Promise<void>;
 };
 
-// Polling interval (ms) for PTY output when Wails events are unreliable.
-const POLL_INTERVAL = 30;
-
-// Active poll loops keyed by PTY id.
-const pollLoops = new Map<number, { stop: () => void }>();
-
-function startPollLoop(
-  id: number,
-  handlers: PtyHandlers,
-  releaseHandlers: () => void,
-): () => void {
-  let running = true;
-  const loop = async () => {
-    while (running) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL));
-      if (!running) break;
-      try {
-        const buf = await invoke<number[]>("pty_read_output", { id });
-        if (buf && buf.length > 0) {
-          handlers.onData(new Uint8Array(buf));
-        }
-      } catch {
-        // PTY may have been closed; stop polling.
-        running = false;
-        releaseHandlers();
-      }
-    }
-  };
-  loop();
-  return () => {
-    running = false;
-  };
-}
-
 export async function openPty(
   cols: number,
   rows: number,
@@ -87,10 +53,6 @@ export async function openPty(
     onExit,
   });
 
-  // Start polling loop as fallback (Wails EventsEmit unreliable in dev mode).
-  const stopPoll = startPollLoop(id, handlers, releaseHandlers);
-  pollLoops.set(id, { stop: stopPoll });
-
   let closed = false;
   const headers = { "x-pty-id": String(id) };
 
@@ -107,11 +69,6 @@ export async function openPty(
         await invoke("pty_close", { id });
       } finally {
         releaseHandlers();
-        const entry = pollLoops.get(id);
-        if (entry) {
-          entry.stop();
-          pollLoops.delete(id);
-        }
       }
     },
   };

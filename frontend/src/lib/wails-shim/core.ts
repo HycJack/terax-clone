@@ -33,8 +33,6 @@ export class Channel<T = unknown> {
   // detects a Channel argument and passes the channel instance through.
   _attach(prefix: string): string {
     const name = `${prefix}:${this.eventName}`;
-    // Use the imported EventsOn (from wailsjs/runtime).
-    // This is the canonical Wails v2 pattern.
     EventsOn(name, (data: unknown) => {
       if (this.cancelled) return;
       // Wails wraps EventsEmit extra args into a data array:
@@ -193,7 +191,6 @@ const SINGLE_ARG: Record<string, string> = {
   pty_close: "id",
   pty_has_foreground_process: "id",
   pty_has_foreground_job: "id",
-  pty_read_output: "id",
   pty_shell_name: "id",
   // lsp
   lsp_detect: "command",

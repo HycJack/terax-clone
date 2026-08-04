@@ -58,6 +58,11 @@ type Session struct {
 	onData string
 	onExit string
 
+	// emitEvent is a stored reference to wailsruntime.EventsEmit, stored
+	// at session creation so pump goroutines always use the same function
+	// regardless of context validity after HMR.
+	emitEvent func(ctx context.Context, event string, optionalData ...interface{})
+
 	// outputBuf accumulates PTY output when pump is running.
 	// JS consumers poll via PtyReadOutput to bypass Wails event bus issues.
 	outputBuf bytes.Buffer
@@ -176,6 +181,7 @@ func (m *Manager) Open(
 	m.sessions[id] = sess
 	m.mu.Unlock()
 
+	sess.emitEvent = wailsruntime.EventsEmit
 	go sess.pump(ctx)
 	return sess, nil
 }
@@ -334,10 +340,10 @@ func (s *Session) pump(ctx context.Context) {
 			s.outputMu.Lock()
 			s.outputBuf.Write(payload)
 			s.outputMu.Unlock()
-			// Also try EventsEmit (may not work in wails dev)
+			// Emit via stored function reference (survives HMR)
 			b64 := base64.StdEncoding.EncodeToString(payload)
-			if s.onData != "" {
-				wailsruntime.EventsEmit(ctx, s.onData, b64)
+			if s.onData != "" && s.emitEvent != nil {
+				s.emitEvent(ctx, s.onData, b64)
 			}
 		}
 		if err != nil {
@@ -350,8 +356,8 @@ func (s *Session) pump(ctx context.Context) {
 func (s *Session) waitAndExit(ctx context.Context) {
 	_ = s.proc.Wait()
 	code := s.procState.ExitCode()
-	if s.onExit != "" {
-		wailsruntime.EventsEmit(ctx, s.onExit, code)
+	if s.onExit != "" && s.emitEvent != nil {
+		s.emitEvent(ctx, s.onExit, code)
 	}
 }
 
