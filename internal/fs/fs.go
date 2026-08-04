@@ -271,12 +271,43 @@ func Stat(path string) (types.FsStat, error) {
 }
 
 // ReadFile reads a text file as UTF-8. Binary detection is best-effort.
-func ReadFile(path string) (string, error) {
+// ReadFileResult mirrors the frontend's ReadResult envelope.
+type ReadFileResult = types.ReadResult
+
+// ReadFile reads a file and returns a ReadResult envelope so the frontend
+// can distinguish text / binary / too-large.
+func ReadFile(path string) (ReadFileResult, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ReadFileResult{}, err
+	}
+	const limit = 10 * 1024 * 1024 // 10 MB
+	if info.Size() > limit {
+		return ReadFileResult{Kind: "toolarge", Size: info.Size(), Limit: limit}, nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return ReadFileResult{}, err
 	}
-	return string(data), nil
+	if isBinary(data) {
+		return ReadFileResult{Kind: "binary", Size: int64(len(data))}, nil
+	}
+	return ReadFileResult{Kind: "text", Content: string(data), Size: int64(len(data))}, nil
+}
+
+// isBinary returns true if the byte slice contains a NUL byte in the first
+// 8 KB — a heuristic that matches git/GitHub's binary detection.
+func isBinary(data []byte) bool {
+	n := len(data)
+	if n > 8192 {
+		n = 8192
+	}
+	for i := 0; i < n; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // WriteFile writes UTF-8 text to a path. Parent directories are created.

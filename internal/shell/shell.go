@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"terax/internal/sysproc"
 	"terax/internal/types"
@@ -57,11 +58,16 @@ func CloseSession(sessionID int) error {
 
 // Job is a captured output buffer plus the running process handle.
 type Job struct {
-	ID     int
-	Cmd    *exec.Cmd
-	buf    bytes.Buffer
-	mu     sync.Mutex
-	closed atomic.Bool
+	ID         int
+	Cmd        *exec.Cmd
+	Command   string
+	Cwd        string
+	StartedAt  int64 // unix millis
+	exitCode   int
+	exitCodeOK bool
+	buf       bytes.Buffer
+	mu        sync.Mutex
+	closed    atomic.Bool
 }
 
 // RunCommand executes `cmd` in the workspace's shell and returns its output.
@@ -153,7 +159,13 @@ func BgSpawn(ctx context.Context, m *Manager, args types.ShellBgSpawnArgs) (int,
 		return 0, err
 	}
 	id := nextJobID(m)
-	job := &Job{ID: id, Cmd: cmd}
+	job := &Job{
+		ID:        id,
+		Cmd:       cmd,
+		Command:   args.Command,
+		Cwd:       args.Cwd,
+		StartedAt: time.Now().UnixMilli(),
+	}
 	m.mu.Lock()
 	m.jobs[id] = job
 	m.mu.Unlock()
@@ -168,7 +180,19 @@ func BgSpawn(ctx context.Context, m *Manager, args types.ShellBgSpawnArgs) (int,
 				break
 			}
 		}
-		_ = cmd.Wait()
+		err = cmd.Wait()
+		job.mu.Lock()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				job.exitCode = exitErr.ExitCode()
+			} else {
+				job.exitCode = -1
+			}
+		} else {
+				job.exitCode = 0
+			job.exitCodeOK = true
+		}
+		job.mu.Unlock()
 		job.closed.Store(true)
 	}()
 	return id, nil
@@ -186,12 +210,39 @@ func BgLogs(m *Manager, args types.ShellBgLogsArgs) (string, error) {
 }
 
 // BgList returns the IDs of all known jobs.
-func BgList(m *Manager) []int {
+// BgProcessInfo is the JSON shape the frontend expects from `shell_bg_list`.
+// It mirrors the Tauri envelope so the agent UI can render a process table.
+type BgProcessInfo struct {
+	Handle     int    `json:"handle"`
+	Command    string `json:"command"`
+	Cwd        string `json:"cwd"`
+	StartedAt  int64  `json:"started_at_ms"`
+	Exited     bool   `json:"exited"`
+	ExitCode   *int   `json:"exit_code"`
+}
+
+// BgList returns metadata for every background job.
+func BgList(m *Manager) []BgProcessInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]int, 0, len(m.jobs))
-	for id := range m.jobs {
-		out = append(out, id)
+	out := make([]BgProcessInfo, 0, len(m.jobs))
+	for id, j := range m.jobs {
+		j.mu.Lock()
+		var ec *int
+		if j.closed.Load() {
+			code := j.exitCode
+			ec = &code
+		}
+		info := BgProcessInfo{
+			Handle:    id,
+			Command:   j.Command,
+			Cwd:       j.Cwd,
+			StartedAt: j.StartedAt,
+			Exited:    j.closed.Load(),
+			ExitCode:  ec,
+		}
+		j.mu.Unlock()
+		out = append(out, info)
 	}
 	return out
 }

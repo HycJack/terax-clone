@@ -328,6 +328,16 @@ type StoreSaveArgs struct {
 	Data map[string]interface{} `json:"data"`
 }
 
+// ReadResult mirrors `ReadResult` in `src/modules/ai/lib/native.ts`.
+// The frontend uses `kind` to decide whether to surface content, refuse
+// binary blobs, or warn about oversized files.
+type ReadResult struct {
+	Kind    string `json:"kind"`              // "text" | "binary" | "toolarge"
+	Content string `json:"content,omitempty"`
+	Size    int64  `json:"size"`
+	Limit   int64  `json:"limit,omitempty"`
+}
+
 // FsReadDirArgs lists entries of a directory.
 type FsReadDirArgs struct {
 	Path            string `json:"path"`

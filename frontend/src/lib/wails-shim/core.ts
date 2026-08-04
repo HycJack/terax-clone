@@ -36,8 +36,9 @@ export class Channel<T = unknown> {
     const name = `${prefix}:${this.eventName}`;
     EventsOn(name, (data: unknown) => {
       if (this.cancelled) return;
-      // Wails serializes arrays → Uint8Array on the way in; if Go emits a
-      // number[] for raw bytes we transparently convert.
+      // Wails JSON-serialises Go []byte as a base64 string; callers
+      // (e.g. proxyFetch) decode it themselves. Non-binary payloads pass
+      // through unchanged.
       this.onmessage?.(data as T);
     });
     return name;

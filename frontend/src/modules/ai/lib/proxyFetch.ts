@@ -117,7 +117,18 @@ async function proxyFetchImpl(
           break;
         }
         case "chunk": {
-          streamController?.enqueue(Uint8Array.from(event.bytes));
+          // Go's []byte is JSON-serialised as a base64 string by Wails.
+          // Decode it back to raw bytes; fall back to number[] for safety.
+          const raw = event.bytes;
+          if (typeof raw === "string") {
+            // base64 decode
+            const bin = atob(raw);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            streamController?.enqueue(arr);
+          } else if (Array.isArray(raw)) {
+            streamController?.enqueue(Uint8Array.from(raw));
+          }
           break;
         }
         case "end": {

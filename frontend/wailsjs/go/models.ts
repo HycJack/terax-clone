@@ -509,6 +509,33 @@ export namespace main {
 
 }
 
+export namespace shell {
+	
+	export class BgProcessInfo {
+	    handle: number;
+	    command: string;
+	    cwd: string;
+	    started_at_ms: number;
+	    exited: boolean;
+	    exit_code?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BgProcessInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.handle = source["handle"];
+	        this.command = source["command"];
+	        this.cwd = source["cwd"];
+	        this.started_at_ms = source["started_at_ms"];
+	        this.exited = source["exited"];
+	        this.exit_code = source["exit_code"];
+	    }
+	}
+
+}
+
 export namespace types {
 	
 	export class AiHttpRequestArgs {
@@ -1594,6 +1621,24 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class ReadResult {
+	    kind: string;
+	    content?: string;
+	    size: number;
+	    limit?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReadResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.content = source["content"];
+	        this.size = source["size"];
+	        this.limit = source["limit"];
+	    }
 	}
 	export class ShellBgKillArgs {
 	    handle: number;

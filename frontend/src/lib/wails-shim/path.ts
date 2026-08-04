@@ -1,33 +1,60 @@
 /**
  * Tauri→Wails shim: `@tauri-apps/api/path`.
- * Tauri exposes OS path helpers as async IPC; for our needs (UI-side cwd /
- * config dir lookups) we resolve them directly via the browser context.
- * 
- * Note: the real OS path data lives in Go; this shim returns reasonable
- * defaults that match the OS the app is running on.
+ * Delegates to the Go backend for real OS paths (home, config, data dirs).
+ * Falls back to reasonable defaults if the backend call fails.
  */
+
+import { invoke } from "@tauri-apps/api/core";
 
 const isWindows =
   typeof navigator !== "undefined" &&
   navigator.platform?.toLowerCase().includes("win");
 
+let cachedHome: string | null = null;
+let cachedConfigDir: string | null = null;
+let cachedDataDir: string | null = null;
+
 export async function homeDir(): Promise<string> {
-  // We can't read HOME / USERPROFILE from the browser. The backend's
-  // `workspace_current_dir` command is the source of truth; this stub is
-  // here only so the import doesn't crash if the frontend needs a value
-  // before that command lands.
+  if (cachedHome) return cachedHome;
+  try {
+    const h = await invoke<string>("app_home_dir");
+    if (h) {
+      cachedHome = h;
+      return h;
+    }
+  } catch {
+    /* fall through to default */
+  }
   return isWindows ? "C:\\Users\\Default" : "/root";
 }
 
 export async function appConfigDir(): Promise<string> {
-  // Wails-managed dir; the Go side has the real path. Frontend callers should
-  // prefer the Go-provided path via `invoke("app_config_dir")` for writes.
+  if (cachedConfigDir) return cachedConfigDir;
+  try {
+    const d = await invoke<string>("app_config_dir");
+    if (d) {
+      cachedConfigDir = d;
+      return d;
+    }
+  } catch {
+    /* fall through */
+  }
   return isWindows
     ? "C:\\Users\\Default\\AppData\\Roaming\\terax"
     : "/root/.config/terax";
 }
 
 export async function appDataDir(): Promise<string> {
+  if (cachedDataDir) return cachedDataDir;
+  try {
+    const d = await invoke<string>("app_data_dir");
+    if (d) {
+      cachedDataDir = d;
+      return d;
+    }
+  } catch {
+    /* fall through */
+  }
   return isWindows
     ? "C:\\Users\\Default\\AppData\\Roaming\\terax"
     : "/root/.local/share/terax";

@@ -18,6 +18,18 @@ export function AiHttpStream(arg1) {
   return window['go']['main']['App']['AiHttpStream'](arg1);
 }
 
+export function AppConfigDir() {
+  return window['go']['main']['App']['AppConfigDir']();
+}
+
+export function AppDataDir() {
+  return window['go']['main']['App']['AppDataDir']();
+}
+
+export function AppHomeDir() {
+  return window['go']['main']['App']['AppHomeDir']();
+}
+
 export function AutostartDisable() {
   return window['go']['main']['App']['AutostartDisable']();
 }
@@ -356,6 +368,10 @@ export function WorkspaceAuthorize(arg1) {
 
 export function WorkspaceCurrentDir() {
   return window['go']['main']['App']['WorkspaceCurrentDir']();
+}
+
+export function WorkspacePickDirectory() {
+  return window['go']['main']['App']['WorkspacePickDirectory']();
 }
 
 export function WslDefaultDistro() {

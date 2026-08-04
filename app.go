@@ -406,9 +406,9 @@ func (a *App) ListSubdirs(args ListSubdirsArgs) ([]string, error) {
 }
 
 // FsReadFile reads a file as UTF-8 text.
-func (a *App) FsReadFile(path string) (string, error) {
+func (a *App) FsReadFile(path string) (internaltype.ReadResult, error) {
 	if !workspace.IsAuthorized(path) {
-		return "", fmt.Errorf("path not authorized: %s", path)
+		return internaltype.ReadResult{}, fmt.Errorf("path not authorized: %s", path)
 	}
 	return fs.ReadFile(path)
 }
@@ -900,7 +900,7 @@ func (a *App) ShellBgKill(args ShellBgKillArgs) error {
 }
 
 // ShellBgList returns the list of job IDs.
-func (a *App) ShellBgList() []int {
+func (a *App) ShellBgList() []internalshell.BgProcessInfo {
 	return internalshell.BgList(a.bgMgr)
 }
 
@@ -1244,6 +1244,24 @@ func appDir() string {
 		return filepath.Join(h, ".config", "terax")
 	}
 	return ".terax"
+}
+
+// AppConfigDir returns the per-user config directory (same as appDir).
+func (a *App) AppConfigDir() string {
+	return appDir()
+}
+
+// AppDataDir returns the per-user data directory.
+func (a *App) AppDataDir() string {
+	return appDir()
+}
+
+// AppHomeDir returns the user's home directory.
+func (a *App) AppHomeDir() string {
+	if h, err := os.UserHomeDir(); err == nil {
+		return h
+	}
+	return ""
 }
 
 // =====================================================================
