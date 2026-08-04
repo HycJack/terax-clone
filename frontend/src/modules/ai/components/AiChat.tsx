@@ -176,6 +176,11 @@ type Props = {
   clearError: () => void;
   addToolApprovalResponse: (arg: ApprovalArg) => void | PromiseLike<void>;
   stop: () => void | PromiseLike<void>;
+  /**
+   * Navigate to a file:line hit. When set, file paths in tool input/output
+   * become Cmd/Ctrl-clickable.
+   */
+  onOpenContentHit?: (path: string, line: number) => void;
 };
 
 export function AiChatView({
@@ -184,6 +189,7 @@ export function AiChatView({
   error,
   clearError,
   addToolApprovalResponse,
+  onOpenContentHit,
 }: Props) {
   const isBusy = status === "submitted" || status === "streaming";
   const lastMessage = messages[messages.length - 1];
@@ -225,6 +231,7 @@ export function AiChatView({
             key={m.id}
             message={m}
             onApproval={onApproval}
+            onOpenContentHit={onOpenContentHit}
             streaming={m.id === streamingMessageId}
           />
         ))}
@@ -320,10 +327,12 @@ const ContinueRow = memo(function ContinueRow({
 const RenderedMessage = memo(function RenderedMessage({
   message,
   onApproval,
+  onOpenContentHit,
   streaming,
 }: {
   message: UIMessage;
   onApproval: (id: string, approved: boolean) => void;
+  onOpenContentHit?: (path: string, line: number) => void;
   streaming: boolean;
 }) {
   // Index of the trailing text part — only that one is "live" mid-stream.
@@ -375,7 +384,7 @@ const RenderedMessage = memo(function RenderedMessage({
             if (g.kind === "reads") {
               return (
                 <PartAppear key={`${message.id}-${g.key}`}>
-                  <ReadGroup parts={g.parts} />
+                  <ReadGroup parts={g.parts} onOpenContentHit={onOpenContentHit} />
                 </PartAppear>
               );
             }
@@ -386,7 +395,10 @@ const RenderedMessage = memo(function RenderedMessage({
             if (isReadSingle) {
               return (
                 <PartAppear key={`${message.id}-${g.key}`}>
-                  <ReadRow part={g.part} />
+                  <ReadRow
+                    part={g.part}
+                    onOpenContentHit={onOpenContentHit}
+                  />
                 </PartAppear>
               );
             }
@@ -395,6 +407,7 @@ const RenderedMessage = memo(function RenderedMessage({
                 <RenderedPart
                   part={g.part}
                   onApproval={onApproval}
+                  onOpenContentHit={onOpenContentHit}
                   streaming={streaming && g.idx === lastTextIdx}
                 />
               </PartAppear>
@@ -471,7 +484,13 @@ function basename(p: string): string {
   return i >= 0 ? p.slice(i + 1) : p;
 }
 
-const ReadGroup = memo(function ReadGroup({ parts }: { parts: AnyPart[] }) {
+const ReadGroup = memo(function ReadGroup({
+  parts,
+  onOpenContentHit,
+}: {
+  parts: AnyPart[];
+  onOpenContentHit?: (path: string, line: number) => void;
+}) {
   const paths = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -534,7 +553,30 @@ const ReadGroup = memo(function ReadGroup({ parts }: { parts: AnyPart[] }) {
                 strokeWidth={1.75}
                 className="shrink-0 opacity-60"
               />
-              <span className="truncate text-foreground">
+              <span
+                role={onOpenContentHit ? "button" : undefined}
+                tabIndex={onOpenContentHit ? 0 : undefined}
+                title={
+                  onOpenContentHit
+                    ? "Cmd/Ctrl+Click to open"
+                    : undefined
+                }
+                onClick={
+                  onOpenContentHit
+                    ? (e) => {
+                        if (!(e.metaKey || e.ctrlKey)) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onOpenContentHit(path, 1);
+                      }
+                    : undefined
+                }
+                className={cn(
+                  "truncate text-foreground",
+                  onOpenContentHit &&
+                    "cursor-pointer underline decoration-dotted decoration-muted-foreground/60 underline-offset-2 hover:text-foreground hover:decoration-foreground/80",
+                )}
+              >
                 {basename(path)}
               </span>
               <span className="truncate opacity-60">{path}</span>
@@ -558,7 +600,13 @@ const PartAppear = memo(function PartAppear({
   );
 });
 
-const ReadRow = memo(function ReadRow({ part }: { part: AnyPart }) {
+const ReadRow = memo(function ReadRow({
+  part,
+  onOpenContentHit,
+}: {
+  part: AnyPart;
+  onOpenContentHit?: (path: string, line: number) => void;
+}) {
   const path = readPathFromPart(part);
   const state = (part as { state?: string }).state ?? "";
   const isError = state === "output-error";
@@ -579,7 +627,29 @@ const ReadRow = memo(function ReadRow({ part }: { part: AnyPart }) {
         className="shrink-0 text-muted-foreground"
       />
       <span className="shrink-0 font-medium text-foreground">Read</span>
-      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+      <span
+        role={onOpenContentHit ? "button" : undefined}
+        tabIndex={onOpenContentHit ? 0 : undefined}
+        title={
+          onOpenContentHit ? "Cmd/Ctrl+Click to open" : undefined
+        }
+        onClick={
+          onOpenContentHit && path
+            ? (e) => {
+                if (!(e.metaKey || e.ctrlKey)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenContentHit(path, 1);
+              }
+            : undefined
+        }
+        className={cn(
+          "min-w-0 flex-1 truncate font-mono text-[11px]",
+          onOpenContentHit && path
+            ? "cursor-pointer text-foreground underline decoration-dotted decoration-muted-foreground/60 underline-offset-2 hover:text-foreground hover:decoration-foreground/80"
+            : "text-muted-foreground",
+        )}
+      >
         {path ?? ""}
       </span>
     </div>
@@ -589,10 +659,12 @@ const ReadRow = memo(function ReadRow({ part }: { part: AnyPart }) {
 const RenderedPart = memo(function RenderedPart({
   part,
   onApproval,
+  onOpenContentHit,
   streaming,
 }: {
   part: AnyPart;
   onApproval: (id: string, approved: boolean) => void;
+  onOpenContentHit?: (path: string, line: number) => void;
   streaming: boolean;
 }) {
   if (part.type === "text") {
@@ -622,6 +694,7 @@ const RenderedPart = memo(function RenderedPart({
       <RenderedTool
         part={part as unknown as AnyToolPart}
         onApproval={onApproval}
+        onOpenContentHit={onOpenContentHit}
       />
     );
   }
@@ -632,9 +705,11 @@ const RenderedPart = memo(function RenderedPart({
 const RenderedTool = memo(function RenderedTool({
   part,
   onApproval,
+  onOpenContentHit,
 }: {
   part: AnyToolPart;
   onApproval: (id: string, approved: boolean) => void;
+  onOpenContentHit?: (path: string, line: number) => void;
 }) {
   const toolName =
     part.type === "dynamic-tool"
@@ -658,6 +733,7 @@ const RenderedTool = memo(function RenderedTool({
       input={part.input}
       output={"output" in part ? part.output : undefined}
       errorText={"errorText" in part ? part.errorText : undefined}
+      onOpenContentHit={onOpenContentHit}
       defaultOpen={toolName === "list_directory"}
     />
   );

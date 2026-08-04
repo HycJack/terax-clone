@@ -38,6 +38,7 @@ import { useChatStore } from "../store/chatStore";
 import { getOrCreateChat } from "../store/chatRuntime";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { usePlanStore } from "../store/planStore";
+import { getLspNavigator } from "@/modules/lsp/lib/navigator";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { AiChatView } from "./AiChat";
 import { PlanDiffReview } from "./PlanDiffReview";
@@ -202,6 +203,9 @@ function Body({
               clearError={helpers.clearError}
               addToolApprovalResponse={helpers.addToolApprovalResponse}
               stop={helpers.stop}
+              onOpenContentHit={(...args) =>
+                getLspNavigator()?.openFile(...args)
+              }
             />
           </div>
         )}

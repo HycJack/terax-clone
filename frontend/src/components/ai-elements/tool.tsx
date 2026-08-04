@@ -119,7 +119,57 @@ export type ToolProps = ComponentProps<typeof Collapsible> & {
   input?: unknown;
   output?: unknown;
   errorText?: string;
+  /**
+   * Navigate to a file:line hit. When provided, paths in tool input/output
+   * become Cmd/Ctrl-clickable (matches the editor's `metaKey || ctrlKey`
+   * convention so users get the same affordance everywhere).
+   */
+  onOpenContentHit?: (path: string, line: number) => void;
 };
+
+/**
+ * Render a file path as a small clickable chip. Plain click does nothing —
+ * Cmd/Ctrl-click invokes `onOpenContentHit(path, line)`. When no callback
+ * is supplied we fall back to a static span so the layout stays identical.
+ */
+function ClickablePath({
+  path,
+  line,
+  onOpenContentHit,
+  className,
+  prefix,
+}: {
+  path: string;
+  line?: number;
+  onOpenContentHit?: (path: string, line: number) => void;
+  className?: string;
+  prefix?: string;
+}) {
+  const handleClick = onOpenContentHit
+    ? (e: React.MouseEvent<HTMLSpanElement>) => {
+        if (!(e.metaKey || e.ctrlKey)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenContentHit(path, line ?? 1);
+      }
+    : undefined;
+  return (
+    <span
+      role={onOpenContentHit ? "button" : undefined}
+      tabIndex={onOpenContentHit ? 0 : undefined}
+      title={onOpenContentHit ? "Cmd/Ctrl+Click to open" : undefined}
+      onClick={onOpenContentHit ? handleClick : undefined}
+      className={cn(
+        className,
+        onOpenContentHit &&
+          "cursor-pointer rounded-sm underline decoration-dotted decoration-muted-foreground/60 underline-offset-2 hover:text-foreground hover:decoration-foreground/80",
+      )}
+    >
+      {prefix}
+      {path}
+    </span>
+  );
+}
 
 // Tools whose `input` carries large/streaming content (file bodies, sub-
 // agent prompts, todo lists). The AI diff tab is the canonical place to
@@ -141,6 +191,7 @@ const ToolImpl = ({
   input,
   output,
   errorText,
+  onOpenContentHit,
   defaultOpen,
   ...props
 }: ToolProps) => {
@@ -204,13 +255,18 @@ const ToolImpl = ({
         >
           <div className="ml-3 mt-1 space-y-2 border-l border-border/60 pl-3 pb-1">
             {showInputBody ? (
-              <ToolInput toolName={toolName} input={input} />
+              <ToolInput
+                toolName={toolName}
+                input={input}
+                onOpenContentHit={onOpenContentHit}
+              />
             ) : null}
             {showOutputBody || errorText ? (
               <ToolOutput
                 toolName={toolName}
                 output={showOutputBody ? output : undefined}
                 errorText={errorText}
+                onOpenContentHit={onOpenContentHit}
               />
             ) : null}
           </div>
@@ -228,6 +284,7 @@ export const Tool = memo(ToolImpl, (a, b) => {
   if (a.errorText !== b.errorText) return false;
   if (a.output !== b.output) return false;
   if (a.className !== b.className) return false;
+  if (a.onOpenContentHit !== b.onOpenContentHit) return false;
   if (HEAVY_CONTENT_TOOLS.has(a.toolName)) {
     return deriveSummary(a.toolName, a.input) ===
       deriveSummary(b.toolName, b.input);
@@ -235,9 +292,17 @@ export const Tool = memo(ToolImpl, (a, b) => {
   return a.input === b.input;
 });
 
-function ToolInput({ toolName, input }: { toolName: string; input: unknown }) {
+function ToolInput({
+  toolName,
+  input,
+  onOpenContentHit,
+}: {
+  toolName: string;
+  input: unknown;
+  onOpenContentHit?: (path: string, line: number) => void;
+}) {
   if (input == null) return null;
-  const preview = renderInputPreview(toolName, input);
+  const preview = renderInputPreview(toolName, input, onOpenContentHit);
   if (preview) {
     return (
       <div className="space-y-1">
@@ -264,6 +329,7 @@ function ToolInput({ toolName, input }: { toolName: string; input: unknown }) {
 function renderInputPreview(
   toolName: string,
   input: unknown,
+  onOpenContentHit?: (path: string, line: number) => void,
 ): ReactNode | null {
   if (!input || typeof input !== "object") return null;
   const i = input as Record<string, unknown>;
@@ -296,7 +362,9 @@ function renderInputPreview(
     const path = str("path") ?? str("url");
     if (!path) return null;
     return (
-      <div className="font-mono text-[11px] text-muted-foreground">{path}</div>
+      <div className="font-mono text-[11px] text-muted-foreground">
+        <ClickablePath path={path} onOpenContentHit={onOpenContentHit} />
+      </div>
     );
   }
   if (toolName === "grep") {
@@ -306,7 +374,11 @@ function renderInputPreview(
     return (
       <div className="space-y-0.5 font-mono text-[11px]">
         <div className="text-foreground">{pat}</div>
-        {path ? <div className="text-muted-foreground">{path}</div> : null}
+        {path ? (
+          <div className="text-muted-foreground">
+            <ClickablePath path={path} onOpenContentHit={onOpenContentHit} />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -317,10 +389,12 @@ function ToolOutput({
   toolName,
   output,
   errorText,
+  onOpenContentHit,
 }: {
   toolName: string;
   output: unknown;
   errorText?: string;
+  onOpenContentHit?: (path: string, line: number) => void;
 }) {
   if (errorText) {
     return (
@@ -334,7 +408,7 @@ function ToolOutput({
   }
   if (output === undefined || output === null) return null;
 
-  const custom = renderToolOutput(toolName, output);
+  const custom = renderToolOutput(toolName, output, onOpenContentHit);
   if (custom) return custom;
 
   let body: ReactNode;
@@ -358,7 +432,11 @@ function ToolOutput({
   );
 }
 
-function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
+function renderToolOutput(
+  toolName: string,
+  output: unknown,
+  onOpenContentHit?: (path: string, line: number) => void,
+): ReactNode | null {
   if (!output || typeof output !== "object") return null;
   const o = output as Record<string, unknown>;
 
@@ -371,7 +449,12 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
       <div className="flex items-center gap-1.5 font-mono text-[11px]">
         <span className="text-emerald-600 dark:text-emerald-400">✓</span>
         <span className="text-foreground">read</span>
-        {path ? <span className="text-muted-foreground">· {path}</span> : null}
+        {path ? (
+          <span className="text-muted-foreground">
+            ·{" "}
+            <ClickablePath path={path} onOpenContentHit={onOpenContentHit} />
+          </span>
+        ) : null}
         {lines != null ? (
           <span className="text-muted-foreground">
             ({lines} line{lines === 1 ? "" : "s"}
@@ -469,19 +552,27 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
     return (
       <div className="space-y-1">
         <div className="max-h-72 overflow-auto rounded bg-muted/30 font-mono text-[11px]">
-          {hits.slice(0, 200).map((h, idx) => (
-            <div
-              key={`${h.rel ?? h.path}-${h.line}-${idx}`}
-              className="flex gap-2 border-b border-border/30 px-2 py-1 last:border-b-0 hover:bg-muted/60"
-            >
-              <span className="shrink-0 text-muted-foreground">
-                {h.rel ?? h.path}:{h.line}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-foreground">
-                {pattern ? highlightMatch(h.text, pattern) : h.text}
-              </span>
-            </div>
-          ))}
+          {hits.slice(0, 200).map((h, idx) => {
+            const hitPath = h.rel ?? h.path ?? "";
+            return (
+              <div
+                key={`${hitPath}-${h.line}-${idx}`}
+                className="flex gap-2 border-b border-border/30 px-2 py-1 last:border-b-0 hover:bg-muted/60"
+              >
+                <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+                  <ClickablePath
+                    path={hitPath}
+                    line={h.line}
+                    onOpenContentHit={onOpenContentHit}
+                  />
+                  <span className="text-muted-foreground">:{h.line}</span>
+                </span>
+                <span className="min-w-0 flex-1 truncate text-foreground">
+                  {pattern ? highlightMatch(h.text, pattern) : h.text}
+                </span>
+              </div>
+            );
+          })}
         </div>
         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
           <span>
@@ -514,8 +605,12 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
     return (
       <div className="max-h-60 overflow-auto rounded bg-muted/30 px-2 py-1 font-mono text-[11px]">
         {matches.slice(0, 300).map((p) => (
-          <div key={p} className="truncate text-muted-foreground">
-            {p}
+          <div key={p} className="truncate">
+            <ClickablePath
+              path={p}
+              onOpenContentHit={onOpenContentHit}
+              className="text-muted-foreground"
+            />
           </div>
         ))}
       </div>
@@ -536,7 +631,10 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
             </span>
           ) : null}
           {path ? (
-            <span className="text-muted-foreground">· {path}</span>
+            <span className="text-muted-foreground">
+              ·{" "}
+              <ClickablePath path={path} onOpenContentHit={onOpenContentHit} />
+            </span>
           ) : null}
         </div>
       );
@@ -552,7 +650,12 @@ function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
         <span className="text-foreground">
           {toolName === "create_directory" ? "created" : "wrote"}
         </span>
-        {path ? <span className="text-muted-foreground">· {path}</span> : null}
+        {path ? (
+          <span className="text-muted-foreground">
+            ·{" "}
+            <ClickablePath path={path} onOpenContentHit={onOpenContentHit} />
+          </span>
+        ) : null}
         {bytes != null ? (
           <span className="text-muted-foreground">({formatBytes(bytes)})</span>
         ) : null}
