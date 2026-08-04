@@ -1,6 +1,9 @@
 import { endpointIdFromCompatModel } from "@/modules/ai/config";
 import { getCustomEndpointKey, getKey } from "@/modules/ai/lib/keyring";
-import { lspFormatDocument, useLspExtension } from "@/modules/lsp";
+import {
+  lspFormatDocument,
+  useLspExtension,
+} from "@/modules/lsp";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { onKeysChanged } from "@/modules/settings/store";
 import { acceptCompletion, startCompletion } from "@codemirror/autocomplete";
@@ -29,6 +32,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { EditorContextMenu, type EditorCmHandle } from "./EditorContextMenu";
 import {
   inlineCompletion,
   triggerInlineCompletion,
@@ -596,28 +600,80 @@ export const EditorPane = memo(
       );
     }
 
+    const cmHandle: EditorCmHandle = useMemo(
+      () => ({
+        path: pathRef.current,
+        runKeyBinding: (key: string) => {
+          const view = cmRef.current?.view;
+          if (!view) return false;
+          // Dispatch a key event so the LSP keybindings (F12, Shift-F12, F2)
+          // registered via keymap.of() in lspInteractions pick it up.
+          const [main, ...mods] = key.split("-").reverse();
+          const event = new KeyboardEvent("keydown", {
+            key: main,
+            shiftKey: mods.includes("Shift"),
+            ctrlKey: mods.includes("Ctrl") || mods.includes("Mod"),
+            metaKey: mods.includes("Meta") || mods.includes("Mod"),
+            altKey: mods.includes("Alt"),
+            bubbles: true,
+          });
+          view.contentDOM.dispatchEvent(event);
+          return true;
+        },
+        getSelection: () => {
+          const view = cmRef.current?.view;
+          if (!view) return null;
+          const { from, to } = view.state.selection.main;
+          if (from === to) return null;
+          return view.state.sliceDoc(from, to);
+        },
+        cursorWord: () => {
+          const view = cmRef.current?.view;
+          if (!view) return null;
+          const { head } = view.state.selection.main;
+          const word = view.state.wordAt(head);
+          if (!word) return null;
+          return {
+            from: word.from,
+            to: word.to,
+            text: view.state.sliceDoc(word.from, word.to),
+          };
+        },
+      }),
+      [],
+    );
+
     return (
-      <div className="flex h-full min-h-0 flex-col zoom-exempt">
-        <CodeMirror
-          ref={cmRef}
-          value={doc.content}
-          onChange={onChange}
-          theme={themeExt}
-          extensions={extensions}
-          height="100%"
-          className="flex-1 min-h-0 overflow-hidden"
-          basicSetup={{
-            lineNumbers: true,
-            highlightActiveLineGutter: true,
-            foldGutter: true,
-            bracketMatching: true,
-            closeBrackets: true,
-            autocompletion: true,
-            highlightActiveLine: true,
-            highlightSelectionMatches: true,
-            searchKeymap: true,
-          }}
-        />
+      <div
+        className="flex h-full min-h-0 flex-col zoom-exempt"
+        onContextMenu={(e) => {
+          // Let Radix ContextMenu handle it; just prevent the native menu
+          // from also showing up behind Radix's portal.
+          if (!(e.target as HTMLElement)?.closest?.(".cm-editor")) return;
+        }}
+      >
+        <EditorContextMenu cm={cmHandle}>
+          <CodeMirror
+            ref={cmRef}
+            value={doc.content}
+            onChange={onChange}
+            theme={themeExt}
+            extensions={extensions}
+            height="100%"
+            className="flex-1 min-h-0 overflow-hidden"
+            basicSetup={{
+              lineNumbers: true,
+              highlightActiveLineGutter: true,
+              foldGutter: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              autocompletion: true,
+              highlightActiveLine: true,
+              highlightSelectionMatches: true,
+              searchKeymap: true,
+            }}
+          />
+        </EditorContextMenu>
       </div>
     );
   }),
