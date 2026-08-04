@@ -299,14 +299,22 @@ func (a *App) PtyOpen(args PtyOpenArgs) (int, error) {
 		v := workspace.CurrentDir()
 		cwd = &v
 	}
+	if cwd == nil || *cwd == "" {
+		fallback := "C:/Users/huangyicao"
+		cwd = &fallback
+		fmt.Printf("[terax-debug] PtyOpen: cwd empty, using fallback %s\n", fallback)
+	}
+	fmt.Printf("[terax-debug] PtyOpen: cwd=%s cols=%d rows=%d blocks=%v shell=%s\n", *cwd, args.Cols, args.Rows, args.Blocks, func() string { if args.Shell != nil { return *args.Shell }; return "" }())
 	shell := ""
 	if args.Shell != nil {
 		shell = *args.Shell
 	}
 	s, err := a.ptyMgr.Open(a.ctx, args.Cols, args.Rows, *cwd, ws.Kind, shell, args.Blocks, args.OnDataEvent, args.OnExitEvent)
 	if err != nil {
+		fmt.Printf("[terax-debug] PtyOpen ERROR: %v\n", err)
 		return 0, err
 	}
+	fmt.Printf("[terax-debug] PtyOpen OK: id=%d\n", s.ID)
 	return s.ID, nil
 }
 

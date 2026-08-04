@@ -491,8 +491,16 @@ function deliverPtyBytes(leafId: number, bytes: Uint8Array): void {
   // Retained slots keep parsing live (render paused); the ring is only for
   // leaves whose buffer was stolen or never bound.
   const slot = getLiveSlotForLeaf(leafId);
-  if (slot) slot.term.write(bytes);
-  else s.dormantRing.push(bytes);
+  if (slot) {
+    if (!sessionStorage.getItem("terax-debug-pty-logged")) {
+      console.log("[terax-debug] deliverPtyBytes: writing to live slot, bytes.length=", bytes.length, "first chars:", new TextDecoder().decode(bytes.slice(0, 80)));
+      sessionStorage.setItem("terax-debug-pty-logged", "1");
+    }
+    slot.term.write(bytes);
+  } else {
+    console.log("[terax-debug] deliverPtyBytes: NO live slot, pushing to dormantRing, bytes.length=", bytes.length);
+    s.dormantRing.push(bytes);
+  }
 }
 
 const SPAWN_RETRY_DELAY_MS = 250;

@@ -101,6 +101,14 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
         __dirname,
         "./src/lib/wails-shim/plugin-updater.ts",
       ),
+      "#wails/runtime/runtime": path.resolve(
+        __dirname,
+        "./src/lib/wails-shim/wails-runtime-stub.ts",
+      ),
+      "#wails/runtime/window": path.resolve(
+        __dirname,
+        "./src/lib/wails-shim/wails-runtime-window-stub.ts",
+      ),
     },
   },
   build: {

@@ -42,6 +42,7 @@ export async function openPty(
     releaseHandlers();
   };
 
+  console.log("[terax-debug] openPty called with cwd=", cwd, "shell=", shell, "blocks=", blocks);
   const id = await invoke<number>("pty_open", {
     cols,
     rows,
@@ -52,6 +53,7 @@ export async function openPty(
     onData,
     onExit,
   });
+  console.log("[terax-debug] openPty OK: id=", id);
 
   let closed = false;
   const headers = { "x-pty-id": String(id) };

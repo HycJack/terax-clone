@@ -501,6 +501,49 @@ export const EditorPane = memo(
       [path, applyPendingGoto],
     );
 
+    const cmHandle: EditorCmHandle = useMemo(
+      () => ({
+        path: pathRef.current,
+        runKeyBinding: (key: string) => {
+          const view = cmRef.current?.view;
+          if (!view) return false;
+          // Dispatch a key event so the LSP keybindings (F12, Shift-F12, F2)
+          // registered via keymap.of() in lspInteractions pick it up.
+          const [main, ...mods] = key.split("-").reverse();
+          const event = new KeyboardEvent("keydown", {
+            key: main,
+            shiftKey: mods.includes("Shift"),
+            ctrlKey: mods.includes("Ctrl") || mods.includes("Mod"),
+            metaKey: mods.includes("Meta") || mods.includes("Mod"),
+            altKey: mods.includes("Alt"),
+            bubbles: true,
+          });
+          view.contentDOM.dispatchEvent(event);
+          return true;
+        },
+        getSelection: () => {
+          const view = cmRef.current?.view;
+          if (!view) return null;
+          const { from, to } = view.state.selection.main;
+          if (from === to) return null;
+          return view.state.sliceDoc(from, to);
+        },
+        cursorWord: () => {
+          const view = cmRef.current?.view;
+          if (!view) return null;
+          const { head } = view.state.selection.main;
+          const word = view.state.wordAt(head);
+          if (!word) return null;
+          return {
+            from: word.from,
+            to: word.to,
+            text: view.state.sliceDoc(word.from, word.to),
+          };
+        },
+      }),
+      [],
+    );
+
     if (doc.status === "loading") {
       return (
         <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -599,49 +642,6 @@ export const EditorPane = memo(
         </div>
       );
     }
-
-    const cmHandle: EditorCmHandle = useMemo(
-      () => ({
-        path: pathRef.current,
-        runKeyBinding: (key: string) => {
-          const view = cmRef.current?.view;
-          if (!view) return false;
-          // Dispatch a key event so the LSP keybindings (F12, Shift-F12, F2)
-          // registered via keymap.of() in lspInteractions pick it up.
-          const [main, ...mods] = key.split("-").reverse();
-          const event = new KeyboardEvent("keydown", {
-            key: main,
-            shiftKey: mods.includes("Shift"),
-            ctrlKey: mods.includes("Ctrl") || mods.includes("Mod"),
-            metaKey: mods.includes("Meta") || mods.includes("Mod"),
-            altKey: mods.includes("Alt"),
-            bubbles: true,
-          });
-          view.contentDOM.dispatchEvent(event);
-          return true;
-        },
-        getSelection: () => {
-          const view = cmRef.current?.view;
-          if (!view) return null;
-          const { from, to } = view.state.selection.main;
-          if (from === to) return null;
-          return view.state.sliceDoc(from, to);
-        },
-        cursorWord: () => {
-          const view = cmRef.current?.view;
-          if (!view) return null;
-          const { head } = view.state.selection.main;
-          const word = view.state.wordAt(head);
-          if (!word) return null;
-          return {
-            from: word.from,
-            to: word.to,
-            text: view.state.sliceDoc(word.from, word.to),
-          };
-        },
-      }),
-      [],
-    );
 
     return (
       <div

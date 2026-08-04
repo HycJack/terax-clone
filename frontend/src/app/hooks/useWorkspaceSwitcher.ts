@@ -27,6 +27,8 @@ type Params = {
  * Owns the resolved home / launch cwd. switchWorkspace runs an interactive
  * local⇄WSL switch (tears down sessions, re-authorizes home, resets tabs);
  * adoptWorkspaceEnv applies a space's env + home on restore, without teardown.
+ * If root is provided (from SpaceMeta.root), it becomes the home/launchCwd
+ * instead of the OS home directory, so each space shows its own project dir.
  */
 export function useWorkspaceSwitcher({
   tabsRef,
@@ -113,11 +115,11 @@ export function useWorkspaceSwitcher({
   );
 
   const adoptWorkspaceEnv = useCallback(
-    async (env: WorkspaceEnv): Promise<string | null> => {
+    async (env: WorkspaceEnv, root?: string | null): Promise<string | null> => {
       setWorkspaceEnv(env.kind === "local" ? LOCAL_WORKSPACE : env);
       let nextHome: string;
       try {
-        nextHome = await resolveEnvHome(env);
+        nextHome = root ?? await resolveEnvHome(env);
       } catch {
         return null;
       }
