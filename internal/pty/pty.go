@@ -18,6 +18,7 @@ package pty
 
 import (
 	"context"
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -57,8 +58,26 @@ type Session struct {
 	onData string
 	onExit string
 
+	// outputBuf accumulates PTY output when pump is running.
+	// JS consumers poll via PtyReadOutput to bypass Wails event bus issues.
+	outputBuf bytes.Buffer
+	outputMu  sync.Mutex
+
 	mu     sync.Mutex
 	closed atomic.Bool
+}
+
+// ReadOutput drains and returns any accumulated PTY output since the last call.
+func (s *Session) ReadOutput() []byte {
+	s.outputMu.Lock()
+	defer s.outputMu.Unlock()
+	if s.outputBuf.Len() == 0 {
+		return nil
+	}
+	b := make([]byte, s.outputBuf.Len())
+	copy(b, s.outputBuf.Bytes())
+	s.outputBuf.Reset()
+	return b
 }
 
 // childProc is the subset of exec.Cmd we use. Defined as an interface so the
@@ -305,26 +324,23 @@ func (m *Manager) HasForeground(id int) bool {
 }
 
 func (s *Session) pump(ctx context.Context) {
-	fmt.Printf("[terax-debug] pump: entered for shell=%s onData=%s\n", s.Shell, s.onData)
-	defer fmt.Printf("[terax-debug] pump: exiting for shell=%s\n", s.Shell)
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.master.Read(buf)
-		fmt.Printf("[terax-debug] pump: Read returned n=%d err=%v\n", n, err)
 		if n > 0 {
 			payload := make([]byte, n)
 			copy(payload, buf[:n])
-			fmt.Printf("[terax-debug] pump: emitting %d bytes to event=%s\n", n, s.onData)
+			// Write to output buffer so JS can poll
+			s.outputMu.Lock()
+			s.outputBuf.Write(payload)
+			s.outputMu.Unlock()
+			// Also try EventsEmit (may not work in wails dev)
+			b64 := base64.StdEncoding.EncodeToString(payload)
 			if s.onData != "" {
-				// Wails v2 events system serialises payload as JSON;
-				// send as base64 string so JS can decode it, not raw []byte.
-				wailsruntime.EventsEmit(ctx, s.onData, base64.StdEncoding.EncodeToString(payload))
+				wailsruntime.EventsEmit(ctx, s.onData, b64)
 			}
 		}
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				fmt.Printf("[terax-debug] pump: non-EOF error: %v\n", err)
-			}
 			break
 		}
 	}
@@ -337,6 +353,17 @@ func (s *Session) waitAndExit(ctx context.Context) {
 	if s.onExit != "" {
 		wailsruntime.EventsEmit(ctx, s.onExit, code)
 	}
+}
+
+// ReadOutput drains any accumulated PTY output for a session.
+func (m *Manager) ReadOutput(id int) []byte {
+	m.mu.RLock()
+	s, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	return s.ReadOutput()
 }
 
 // Write forwards stdin bytes to a session.

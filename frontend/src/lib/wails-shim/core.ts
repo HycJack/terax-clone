@@ -33,19 +33,46 @@ export class Channel<T = unknown> {
   // detects a Channel argument and passes the channel instance through.
   _attach(prefix: string): string {
     const name = `${prefix}:${this.eventName}`;
-    EventsOn(name, (data: unknown) => {
-      if (this.cancelled) return;
-      // Wails JSON-serialises Go []byte as a base64 string; decode it back
-      // to ArrayBuffer so callers get Uint8Array-compatible data.
-      if (typeof data === "string") {
-        const bin = atob(data);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        this.onmessage?.(bytes.buffer as T);
-      } else {
-        this.onmessage?.(data as T);
-      }
-    });
+    // Wails v2 dev mode: EventsOn import may not survive HMR; use
+    // window.runtime directly to ensure the callback is registered
+    // on the live dispatcher.
+    const rt = (window as any)?.runtime;
+    if (rt?.EventsOnMultiple) {
+      rt.EventsOnMultiple(name, (data: unknown) => {
+        if (this.cancelled) return;
+        const raw = Array.isArray(data) && data.length === 1 ? data[0] : data;
+        if (typeof raw === "string") {
+          try {
+            const bin = atob(raw);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            this.onmessage?.(bytes.buffer as T);
+          } catch (e) {
+            console.log("[terax-debug] Channel._attach: atob failed:", e);
+          }
+        } else {
+          this.onmessage?.(raw as T);
+        }
+      }, -1);
+    } else {
+      // Fallback to import
+      EventsOn(name, (data: unknown) => {
+        if (this.cancelled) return;
+        const raw = Array.isArray(data) && data.length === 1 ? data[0] : data;
+        if (typeof raw === "string") {
+          try {
+            const bin = atob(raw);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            this.onmessage?.(bytes.buffer as T);
+          } catch (e) {
+            console.log("[terax-debug] Channel._attach: atob failed:", e);
+          }
+        } else {
+          this.onmessage?.(raw as T);
+        }
+      });
+    }
     return name;
   }
 
@@ -185,6 +212,7 @@ const SINGLE_ARG: Record<string, string> = {
   pty_close: "id",
   pty_has_foreground_process: "id",
   pty_has_foreground_job: "id",
+  pty_read_output: "id",
   pty_shell_name: "id",
   // lsp
   lsp_detect: "command",

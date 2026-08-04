@@ -311,10 +311,8 @@ func (a *App) PtyOpen(args PtyOpenArgs) (int, error) {
 	}
 	s, err := a.ptyMgr.Open(a.ctx, args.Cols, args.Rows, *cwd, ws.Kind, shell, args.Blocks, args.OnDataEvent, args.OnExitEvent)
 	if err != nil {
-		fmt.Printf("[terax-debug] PtyOpen ERROR: %v\n", err)
 		return 0, err
 	}
-	fmt.Printf("[terax-debug] PtyOpen OK: id=%d\n", s.ID)
 	return s.ID, nil
 }
 
@@ -345,6 +343,11 @@ func (a *App) PtyResize(args PtyResizeArgs) error {
 func (a *App) PtyClose(id int) error {
 	a.ptyMgr.Close(id)
 	return nil
+}
+
+// PtyReadOutput returns any accumulated PTY output since last call.
+func (a *App) PtyReadOutput(id int) []byte {
+	return a.ptyMgr.ReadOutput(id)
 }
 
 // PtyCloseAll kills every PTY session.
