@@ -182,6 +182,8 @@ func (m *Manager) Open(
 	m.mu.Unlock()
 
 	sess.emitEvent = wailsruntime.EventsEmit
+	// Store context at creation so pump goroutine always uses the
+	// context that was valid when the session was opened (not after HMR).
 	go sess.pump(ctx)
 	return sess, nil
 }
@@ -330,6 +332,10 @@ func (m *Manager) HasForeground(id int) bool {
 }
 
 func (s *Session) pump(ctx context.Context) {
+	// First emission test: fire a simple string to verify pump events work
+	if s.emitEvent != nil {
+		s.emitEvent(ctx, "test:pump", "pump goroutine started")
+	}
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.master.Read(buf)
@@ -340,7 +346,7 @@ func (s *Session) pump(ctx context.Context) {
 			s.outputMu.Lock()
 			s.outputBuf.Write(payload)
 			s.outputMu.Unlock()
-			// Emit via stored function reference (survives HMR)
+			// Emit via stored function reference
 			b64 := base64.StdEncoding.EncodeToString(payload)
 			if s.onData != "" && s.emitEvent != nil {
 				s.emitEvent(ctx, s.onData, b64)
