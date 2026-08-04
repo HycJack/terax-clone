@@ -332,22 +332,16 @@ func (m *Manager) HasForeground(id int) bool {
 }
 
 func (s *Session) pump(ctx context.Context) {
-	// First emission test: fire a simple string to verify pump events work
-	if s.emitEvent != nil {
-		s.emitEvent(ctx, "test:pump", "pump goroutine started")
-	}
+	// Debug: verify onData is set
+	fmt.Printf("[terax-debug] pump: s.onData=%q s.onExit=%q\n", s.onData, s.onExit)
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.master.Read(buf)
 		if n > 0 {
 			payload := make([]byte, n)
 			copy(payload, buf[:n])
-			// Write to output buffer so JS can poll
-			s.outputMu.Lock()
-			s.outputBuf.Write(payload)
-			s.outputMu.Unlock()
-			// Emit via stored function reference
 			b64 := base64.StdEncoding.EncodeToString(payload)
+			fmt.Printf("[terax-debug] pump: emitting %d bytes to %q b64[:30]=%s\n", n, s.onData, b64[:min(30, len(b64))])
 			if s.onData != "" && s.emitEvent != nil {
 				s.emitEvent(ctx, s.onData, b64)
 			}
