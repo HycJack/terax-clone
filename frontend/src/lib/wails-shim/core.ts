@@ -32,14 +32,19 @@ export class Channel<T = unknown> {
   // Internal: subscribe to backend events. Called from `invoke()` when it
   // detects a Channel argument and passes the channel instance through.
   _attach(prefix: string): string {
-    // Use the channel's own id as a unique event suffix.
     const name = `${prefix}:${this.eventName}`;
     EventsOn(name, (data: unknown) => {
       if (this.cancelled) return;
-      // Wails JSON-serialises Go []byte as a base64 string; callers
-      // (e.g. proxyFetch) decode it themselves. Non-binary payloads pass
-      // through unchanged.
-      this.onmessage?.(data as T);
+      // Wails JSON-serialises Go []byte as a base64 string; decode it back
+      // to ArrayBuffer so callers get Uint8Array-compatible data.
+      if (typeof data === "string") {
+        const bin = atob(data);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        this.onmessage?.(bytes.buffer as T);
+      } else {
+        this.onmessage?.(data as T);
+      }
     });
     return name;
   }

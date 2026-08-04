@@ -18,6 +18,7 @@ package pty
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -304,19 +305,25 @@ func (m *Manager) HasForeground(id int) bool {
 }
 
 func (s *Session) pump(ctx context.Context) {
+	fmt.Printf("[terax-debug] pump: entered for shell=%s onData=%s\n", s.Shell, s.onData)
+	defer fmt.Printf("[terax-debug] pump: exiting for shell=%s\n", s.Shell)
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.master.Read(buf)
+		fmt.Printf("[terax-debug] pump: Read returned n=%d err=%v\n", n, err)
 		if n > 0 {
 			payload := make([]byte, n)
 			copy(payload, buf[:n])
+			fmt.Printf("[terax-debug] pump: emitting %d bytes to event=%s\n", n, s.onData)
 			if s.onData != "" {
-				wailsruntime.EventsEmit(ctx, s.onData, payload)
+				// Wails v2 events system serialises payload as JSON;
+				// send as base64 string so JS can decode it, not raw []byte.
+				wailsruntime.EventsEmit(ctx, s.onData, base64.StdEncoding.EncodeToString(payload))
 			}
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				// Not a clean shutdown — log and continue.
+				fmt.Printf("[terax-debug] pump: non-EOF error: %v\n", err)
 			}
 			break
 		}
