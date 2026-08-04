@@ -151,6 +151,26 @@ type ShellSessionOpenArgs struct {
 	Shell     string       `json:"shell,omitempty"`
 }
 
+// ShellSessionRunArgs sends a command to an existing session.
+type ShellSessionRunArgs struct {
+	ID          int    `json:"id"`
+	Command     string `json:"command"`
+	Cwd         string `json:"cwd"`
+	TimeoutSecs int    `json:"timeoutSecs"`
+}
+
+// ShellSessionResult mirrors the envelope the frontend expects from
+// `shell_session_run`: stdout, stderr, exit code, cwd after the command,
+// and timeout/truncation flags.
+type ShellSessionResult struct {
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	ExitCode  *int   `json:"exit_code"`
+	TimedOut  bool   `json:"timed_out"`
+	Truncated bool   `json:"truncated"`
+	CwdAfter  string `json:"cwd_after"`
+}
+
 // ShellBgSpawnArgs starts a background process.
 type ShellBgSpawnArgs struct {
 	Command   string `json:"command"`

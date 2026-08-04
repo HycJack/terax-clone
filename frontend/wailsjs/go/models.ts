@@ -466,22 +466,6 @@ export namespace main {
 	        this.id = source["id"];
 	    }
 	}
-	export class ShellSessionRunArgs {
-	    id: number;
-	    command: string;
-	    cwd: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ShellSessionRunArgs(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.command = source["command"];
-	        this.cwd = source["cwd"];
-	    }
-	}
 	export class WorkspaceAuthorizeArgs {
 	    path: string;
 	
@@ -1769,6 +1753,46 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class ShellSessionResult {
+	    stdout: string;
+	    stderr: string;
+	    exit_code?: number;
+	    timed_out: boolean;
+	    truncated: boolean;
+	    cwd_after: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShellSessionResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stdout = source["stdout"];
+	        this.stderr = source["stderr"];
+	        this.exit_code = source["exit_code"];
+	        this.timed_out = source["timed_out"];
+	        this.truncated = source["truncated"];
+	        this.cwd_after = source["cwd_after"];
+	    }
+	}
+	export class ShellSessionRunArgs {
+	    id: number;
+	    command: string;
+	    cwd: string;
+	    timeoutSecs: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShellSessionRunArgs(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.command = source["command"];
+	        this.cwd = source["cwd"];
+	        this.timeoutSecs = source["timeoutSecs"];
+	    }
 	}
 	export class StoreLoadArgs {
 	    path: string;

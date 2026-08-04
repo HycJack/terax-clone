@@ -854,15 +854,12 @@ func (a *App) ShellSessionOpen(args ShellSessionOpenArgs) (int, error) {
 }
 
 // ShellSessionRunArgs is the request body.
-type ShellSessionRunArgs struct {
-	ID  int    `json:"id"`
-	Cmd string `json:"command"`
-	Cwd string `json:"cwd"`
-}
+type ShellSessionRunArgs = internaltype.ShellSessionRunArgs
 
-// ShellSessionRun sends a command to an existing session.
-func (a *App) ShellSessionRun(args ShellSessionRunArgs) error {
-	return internalshell.RunInSession(args.ID, args.Cmd)
+// ShellSessionRun sends a command to an existing session and returns the
+// captured output, exit code, and post-command cwd.
+func (a *App) ShellSessionRun(args ShellSessionRunArgs) (*internaltype.ShellSessionResult, error) {
+	return internalshell.RunInSession(a.bgMgr, args)
 }
 
 // ShellSessionCloseArgs is the request body.
@@ -872,7 +869,7 @@ type ShellSessionCloseArgs struct {
 
 // ShellSessionClose closes an interactive session.
 func (a *App) ShellSessionClose(args ShellSessionCloseArgs) error {
-	return internalshell.CloseSession(args.ID)
+	return internalshell.CloseSession(a.bgMgr, args.ID)
 }
 
 // ShellBgSpawnArgs is the request body.

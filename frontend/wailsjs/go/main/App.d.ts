@@ -177,7 +177,7 @@ export function ShellSessionClose(arg1:main.ShellSessionCloseArgs):Promise<void>
 
 export function ShellSessionOpen(arg1:types.ShellSessionOpenArgs):Promise<number>;
 
-export function ShellSessionRun(arg1:main.ShellSessionRunArgs):Promise<void>;
+export function ShellSessionRun(arg1:types.ShellSessionRunArgs):Promise<types.ShellSessionResult>;
 
 export function StoreLoad(arg1:types.StoreLoadArgs):Promise<Record<string, any>>;
 
