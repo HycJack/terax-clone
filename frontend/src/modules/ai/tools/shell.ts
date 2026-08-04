@@ -17,7 +17,11 @@ async function getSessionShell(
 ): Promise<number> {
   let p = sessionShells.get(sessionId);
   if (!p) {
-    p = native.shellSessionOpen(cwd);
+    // On first rejection, remove the cached promise so the next call retries.
+    p = native.shellSessionOpen(cwd).catch((err) => {
+      sessionShells.delete(sessionId);
+      throw err;
+    });
     sessionShells.set(sessionId, p);
   }
   return p;

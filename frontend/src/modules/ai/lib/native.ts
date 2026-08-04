@@ -182,15 +182,15 @@ export const native = {
       pattern: params.pattern,
       root: params.root,
       glob: params.glob ?? null,
-      caseInsensitive: params.caseInsensitive ?? null,
-      maxResults: params.maxResults ?? null,
+      caseInsensitive: params.caseInsensitive ?? false,
+      maxResults: params.maxResults ?? 0,
       workspace: currentWorkspaceEnv(),
     }),
   glob: (params: { pattern: string; root: string; maxResults?: number }) =>
     invoke<GlobResponse>("fs_glob", {
       pattern: params.pattern,
       root: params.root,
-      maxResults: params.maxResults ?? null,
+      maxResults: params.maxResults ?? 0,
       workspace: currentWorkspaceEnv(),
     }),
   runCommand: (
@@ -200,14 +200,14 @@ export const native = {
   ) =>
     invoke<CommandOutput>("shell_run_command", {
       command,
-      cwd: cwd ?? null,
-      timeoutSecs: timeoutSecs ?? null,
+      cwd: cwd ?? "",
+      timeoutSecs: timeoutSecs ?? 0,
       workspace: currentWorkspaceEnv(),
     }),
 
   shellSessionOpen: (cwd?: string | null) =>
     invoke<number>("shell_session_open", {
-      cwd: cwd ?? null,
+      cwd: cwd ?? "",
       workspace: currentWorkspaceEnv(),
     }),
   shellSessionRun: (
@@ -226,8 +226,8 @@ export const native = {
     }>("shell_session_run", {
       id,
       command,
-      cwd: cwd ?? null,
-      timeoutSecs: timeoutSecs ?? null,
+      cwd: cwd ?? "",
+      timeoutSecs: timeoutSecs ?? 0,
       workspace: currentWorkspaceEnv(),
     }),
   shellSessionClose: (id: number) =>
@@ -235,7 +235,7 @@ export const native = {
   shellBgSpawn: (command: string, cwd?: string | null) =>
     invoke<number>("shell_bg_spawn", {
       command,
-      cwd: cwd ?? null,
+      cwd: cwd ?? "",
       workspace: currentWorkspaceEnv(),
     }),
   shellBgLogs: (handle: number, sinceOffset?: number) =>
@@ -245,7 +245,7 @@ export const native = {
       dropped: number;
       exited: boolean;
       exit_code: number | null;
-    }>("shell_bg_logs", { handle, sinceOffset: sinceOffset ?? null }),
+    }>("shell_bg_logs", { handle, sinceOffset: sinceOffset ?? 0 }),
   shellBgKill: (handle: number) => invoke<void>("shell_bg_kill", { handle }),
   shellBgList: () =>
     invoke<
@@ -290,7 +290,7 @@ export const native = {
       repoRoot,
       path,
       staged,
-      originalPath: originalPath ?? null,
+      originalPath: originalPath ?? "",
       workspace: currentWorkspaceEnv(),
     }),
   gitStage: (repoRoot: string, paths: string[]) =>
@@ -335,7 +335,7 @@ export const native = {
   gitLog: (repoRoot: string, options?: { limit?: number; beforeSha?: string }) =>
     invoke<GitLogEntry[]>("git_log", {
       repoRoot,
-      limit: options?.limit ?? null,
+      limit: options?.limit ?? 0,
       beforeSha: options?.beforeSha ?? null,
       workspace: currentWorkspaceEnv(),
     }),
@@ -361,13 +361,13 @@ export const native = {
       repoRoot,
       sha,
       path,
-      originalPath: originalPath ?? null,
+      originalPath: originalPath ?? "",
       workspace: currentWorkspaceEnv(),
     }),
   gitRemoteUrl: (repoRoot: string, name?: string) =>
     invoke<string | null>("git_remote_url", {
       repoRoot,
-      name: name ?? null,
+      name: name ?? "",
       workspace: currentWorkspaceEnv(),
     }),
   gitListBranches: (repoRoot: string) =>
