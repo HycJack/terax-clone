@@ -33,46 +33,27 @@ export class Channel<T = unknown> {
   // detects a Channel argument and passes the channel instance through.
   _attach(prefix: string): string {
     const name = `${prefix}:${this.eventName}`;
-    // Wails v2 dev mode: EventsOn import may not survive HMR; use
-    // window.runtime directly to ensure the callback is registered
-    // on the live dispatcher.
-    const rt = (window as any)?.runtime;
-    if (rt?.EventsOnMultiple) {
-      rt.EventsOnMultiple(name, (data: unknown) => {
-        if (this.cancelled) return;
-        const raw = Array.isArray(data) && data.length === 1 ? data[0] : data;
-        if (typeof raw === "string") {
-          try {
-            const bin = atob(raw);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            this.onmessage?.(bytes.buffer as T);
-          } catch (e) {
-            console.log("[terax-debug] Channel._attach: atob failed:", e);
-          }
-        } else {
-          this.onmessage?.(raw as T);
+    // Use the imported EventsOn (from wailsjs/runtime).
+    // This is the canonical Wails v2 pattern.
+    EventsOn(name, (data: unknown) => {
+      if (this.cancelled) return;
+      // Wails wraps EventsEmit extra args into a data array:
+      //   EventsEmit(ctx, name, b64) → JS callback receives [b64]
+      // Unwrap the first element.
+      const raw = Array.isArray(data) && data.length === 1 ? data[0] : data;
+      if (typeof raw === "string") {
+        try {
+          const bin = atob(raw);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          this.onmessage?.(bytes.buffer as T);
+        } catch (e) {
+          console.error("[terax] Channel._attach: atob failed:", e);
         }
-      }, -1);
-    } else {
-      // Fallback to import
-      EventsOn(name, (data: unknown) => {
-        if (this.cancelled) return;
-        const raw = Array.isArray(data) && data.length === 1 ? data[0] : data;
-        if (typeof raw === "string") {
-          try {
-            const bin = atob(raw);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            this.onmessage?.(bytes.buffer as T);
-          } catch (e) {
-            console.log("[terax-debug] Channel._attach: atob failed:", e);
-          }
-        } else {
-          this.onmessage?.(raw as T);
-        }
-      });
-    }
+      } else {
+        this.onmessage?.(raw as T);
+      }
+    });
     return name;
   }
 

@@ -33,6 +33,7 @@ type App struct {
 	fsWatcher *fs.WatcherManager
 	lspMgr    *lsp.Manager
 	bgMgr     *internalshell.Manager
+	eventsEmit func(ctx context.Context, event string, optionalData ...interface{})
 }
 
 // PtyManager is an alias so we can share with shell pkg.
@@ -45,6 +46,7 @@ func NewApp() *App {
 		fsWatcher: fs.NewWatcherManager(),
 		lspMgr:    lsp.NewManager(),
 		bgMgr:     internalshell.NewManager(),
+		eventsEmit: wailsruntime.EventsEmit,
 	}
 }
 
@@ -313,6 +315,9 @@ func (a *App) PtyOpen(args PtyOpenArgs) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Debug: send a test event to verify Go→JS event bus works
+	a.eventsEmit(a.ctx, "test:handshake", "hello from Go")
+	fmt.Printf("[terax-debug] EventsEmit called via eventsEmit field\n")
 	return s.ID, nil
 }
 
