@@ -17,6 +17,15 @@ import {
 
 export type Theme = "light" | "dark";
 
+/**
+ * WebView2 doesn't always fire a JS `resize` event after a host-side
+ * maximize in frameless mode. Dispatch one manually so absolute-positioned
+ * UI (e.g. the AI mini chat) reclamp immediately.
+ */
+function dispatchResize() {
+  window.dispatchEvent(new Event("resize"));
+}
+
 export class Window {
   label = "main";
 
@@ -44,14 +53,17 @@ export class Window {
 
   async maximize(): Promise<void> {
     await WindowMaximise();
+    dispatchResize();
   }
 
   async unmaximize(): Promise<void> {
     await WindowUnmaximise();
+    dispatchResize();
   }
 
   async toggleMaximize(): Promise<void> {
     await WindowToggleMaximise();
+    dispatchResize();
   }
 
   async isMaximized(): Promise<boolean> {
@@ -62,18 +74,21 @@ export class Window {
     await WindowSetTitle(title);
   }
 
-  /** Tauri event subscription; we just proxy to Wails events for now. */
+  /** Tauri event subscription. We use the native browser `resize` event
+   * because Wails v2 doesn't auto-emit a `wails:resize` event — it only
+   * resizes the WebView2 internally. The native `resize` event fires
+   * reliably for maximize, unmaximize, and edge-drag resizes.
+   */
   async onResized(_cb: () => void): Promise<() => void> {
-    // Wails emits `wails:resize` (string payload) when the window resizes.
-    const { EventsOn } = await import("#wails/runtime/runtime");
-    const unsub = EventsOn("wails:resize", () => {
+    const handler = () => {
       try {
         _cb();
       } catch (e) {
         console.error("onResized handler threw:", e);
       }
-    });
-    return unsub;
+    };
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
   }
 
   async onFocusChanged(_cb: (event: { payload: boolean }) => void): Promise<() => void> {

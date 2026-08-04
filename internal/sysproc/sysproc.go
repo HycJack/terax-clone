@@ -12,8 +12,9 @@ import (
 )
 
 // CREATE_NO_WINDOW is the Windows process creation flag that suppresses
-// the console window. Constant value 0x0200 (CREATE_NO_WINDOW).
-const CREATE_NO_WINDOW = 0x00000200
+// the console window. Constant value 0x08000000 (CREATE_NO_WINDOW).
+// See https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+const CREATE_NO_WINDOW = 0x08000000
 
 // HideWindow configures `cmd` so that spawning it on Windows does not
 // flash a console window. On non-Windows hosts it is a no-op.

@@ -65,7 +65,9 @@ func newPipeBackend(shell string, args []string, cwd string) (*pipeBackend, erro
 	cmd := exec.Command(shell, args...)
 	cmd.Dir = cwd
 	cmd.Env = os.Environ()
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000200}
+	// CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW — group isolates Ctrl+C,
+	// NO_WINDOW suppresses the console flash.
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000200 | 0x08000000}
 
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
