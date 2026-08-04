@@ -326,6 +326,23 @@ func buildShellArgs(cmd string) (string, []string) {
 //	<doneMarker>
 //
 // Everything before <exitMarker> is the command's stdout.
+//
+// Windows notes:
+//   - `cmd.exe /C "<script>"` has two quoting bugs that break our marker
+//     protocol:
+//       1. Go's argument builder wraps the inline script in extra quotes
+//          for cmd.exe; cmd.exe's /C then strips the outer quotes via its
+//          special handling, mangling any inner double-quoted paths like
+//          `cd /d "C:\Users\..."` (they end up with stray backslashes).
+//       2. The user command itself may contain quoted paths, and these
+//          get re-mangled by the same /C processing.
+//     The fix is to write the script to a temp .bat file and execute
+//     that instead. Batch files are parsed by cmd.exe's normal batch
+//     grammar, which respects quoting correctly.
+//   - cmd.exe only expands %errorlevel% inside batch files (which our
+//     temp file satisfies).
+//   - We use sequential lines instead of `&&` so a non-zero exit from
+//     the user command doesn't skip the marker emissions.
 func (s *Session) runCommand(command, cwd string, timeout time.Duration) (*types.ShellSessionResult, error) {
 	const maxOutput = 4 * 1024 * 1024 // 4 MB cap per command
 
@@ -334,36 +351,46 @@ func (s *Session) runCommand(command, cwd string, timeout time.Duration) (*types
 	cwdMarker := fmt.Sprintf("__TERAX_CWD_%d__", id)
 	doneMarker := fmt.Sprintf("__TERAX_DONE_%d__", id)
 
-	// Build the full script: cd into saved cwd, run command, emit markers.
-	var script string
-	if s.shell == "cmd.exe" {
-		cwdPrefix := ""
-		if cwd != "" {
-			cwdPrefix = "cd /d " + quoteShell(cwd) + " & "
-		}
-		script = cwdPrefix + command +
-			" & echo " + exitMarker + "%errorlevel%__" +
-			" & for /f %i in ('cd') do echo " + cwdMarker + "%i__" +
-			" & echo " + doneMarker
-	} else {
-		cwdPrefix := ""
-		if cwd != "" {
-			cwdPrefix = "cd " + quoteShell(cwd) + " && "
-		}
-		script = fmt.Sprintf(
-			"%s%s; printf '%s%%s__\n' \"$?\"; printf '%s%%s__\n' \"$(pwd)\"; printf '%s\n'",
-			cwdPrefix, command, exitMarker, cwdMarker, doneMarker)
-	}
-
-	// Spawn the shell with the script.
-	shellCmd, shellArgs := buildShellArgs(script)
 	ctx := context.Background()
 	var cancel context.CancelFunc
 	if timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	cmd := exec.CommandContext(ctx, shellCmd, shellArgs...)
+
+	var cmd *exec.Cmd
+	var cleanup func()
+	if s.shell == "cmd.exe" {
+		// Build the script as batch-file contents. Each line is its own
+		// command so failures don't short-circuit the marker emissions.
+		script := strings.Join([]string{
+			"@echo off",
+			command,
+			"call echo " + exitMarker + "%errorlevel%__",
+			"echo " + cwdMarker,
+			"cd",
+			"echo " + doneMarker,
+		}, "\r\n") + "\r\n"
+		batchPath, err := writeTempBatch(script)
+		if err != nil {
+			return nil, err
+		}
+		cleanup = func() { _ = os.Remove(batchPath) }
+		cmd = exec.CommandContext(ctx, batchPath)
+	} else {
+		// Unix: use bash -c with the inline script. No /C quoting bug here.
+		cwdPrefix := ""
+		if cwd != "" {
+			cwdPrefix = "cd " + quoteShell(cwd) + " && "
+		}
+		script := fmt.Sprintf(
+			"%s%s; printf '%s%%s__\\n' \"$?\"; printf '%s%%s__\\n' \"$(pwd)\"; printf '%s\\n'",
+			cwdPrefix, command, exitMarker, cwdMarker, doneMarker)
+		cmd = exec.CommandContext(ctx, "bash", "-c", script)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
 	sysproc.HideWindow(cmd)
 	if cwd != "" {
 		cmd.Dir = cwd
@@ -377,6 +404,27 @@ func (s *Session) runCommand(command, cwd string, timeout time.Duration) (*types
 	timedOut := ctx.Err() == context.DeadlineExceeded
 
 	return s.parseMarkers(out.String(), exitMarker, cwdMarker, doneMarker, timedOut, maxOutput, runErr)
+}
+
+// writeTempBatch writes `contents` to a temp .bat file and returns its
+// absolute path. The file is created with restrictive permissions so the
+// user command (which may contain sensitive content) doesn't leak.
+func writeTempBatch(contents string) (string, error) {
+	f, err := os.CreateTemp("", "terax-shell-*.bat")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if runtime.GOOS == "windows" {
+		// Belt-and-suspenders: deny read on the temp file so other users
+		// on the machine can't snoop on command output.
+		_ = os.Chmod(f.Name(), 0o600)
+	}
+	if _, err := f.WriteString(contents); err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // parseMarkers extracts stdout, exit code, and cwd from the shell output

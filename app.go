@@ -951,15 +951,29 @@ func (a *App) WorkspacePickDirectory() (string, error) {
 	if a.ctx == nil {
 		return "", errors.New("app not initialised")
 	}
+	// Seed the picker with the workspace cwd or the home directory so the
+	// user opens somewhere useful rather than at Documents/%USERPROFILE%.
+	defaultDir := workspace.CurrentDir()
+	if defaultDir == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			defaultDir = h
+		}
+	}
 	opts := wailsruntime.OpenDialogOptions{
-		Title: "Select project directory",
+		Title:            "Select project directory",
+		DefaultDirectory: defaultDir,
 	}
 	path, err := wailsruntime.OpenDirectoryDialog(a.ctx, opts)
 	if err != nil {
 		return "", err
 	}
 	if path != "" {
-		_ = workspace.Authorize(path)
+		if err := workspace.Authorize(path); err != nil {
+			return "", err
+		}
+		// Switch the global cwd to the picked directory so subsequent
+		// relative path resolutions land in the new project root.
+		_ = workspace.SetCwd(path)
 	}
 	return path, nil
 }
