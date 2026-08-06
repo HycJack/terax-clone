@@ -1,6 +1,6 @@
 import { ensureMonoFontsLoaded } from "@/lib/fonts";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import type { SearchAddon } from "@xterm/addon-search";
 import {
   useCallback,
@@ -487,18 +487,20 @@ function ensureSession(
 
 function deliverPtyBytes(leafId: number, bytes: Uint8Array): void {
   const s = sessions.get(leafId);
-  if (!s) return;
+  if (!s) {
+    return;
+  }
   // Retained slots keep parsing live (render paused); the ring is only for
   // leaves whose buffer was stolen or never bound.
   const slot = getLiveSlotForLeaf(leafId);
   if (slot) {
-    if (!sessionStorage.getItem("terax-debug-pty-logged")) {
-      console.log("[terax-debug] deliverPtyBytes: writing to live slot, bytes.length=", bytes.length, "first chars:", new TextDecoder().decode(bytes.slice(0, 80)));
-      sessionStorage.setItem("terax-debug-pty-logged", "1");
+    try {
+      slot.term.write(bytes);
+    } catch (e) {
+      // xterm's underlying textarea sometimes throws on teardown; safe to
+      // swallow because the leaf is being torn down anyway.
     }
-    slot.term.write(bytes);
   } else {
-    console.log("[terax-debug] deliverPtyBytes: NO live slot, pushing to dormantRing, bytes.length=", bytes.length);
     s.dormantRing.push(bytes);
   }
 }

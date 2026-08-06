@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { useManagedAgentsStore } from "@/modules/agents/store/managedAgentsStore";
 import {
   findLeafCwd,

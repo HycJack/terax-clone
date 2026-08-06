@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { File02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { useEffect, useRef, useState } from "react";
 
 type Props = {

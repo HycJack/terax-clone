@@ -12,7 +12,7 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from "@codemirror/view";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@/lib/wails/plugin-opener";
 import { LANGUAGES } from "./languageDefinitions";
 
 // Fence-info strings (```ts, ```python) resolve against the same lazy

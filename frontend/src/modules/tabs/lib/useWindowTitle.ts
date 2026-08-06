@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@/lib/wails/window";
 import { findLeafCwd } from "@/modules/terminal/lib/panes";
 import type { Tab } from "./useTabs";
 

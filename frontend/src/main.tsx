@@ -1,8 +1,8 @@
 import "@xterm/xterm/css/xterm.css";
 import "./styles/globals.css";
 
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@/lib/wails/core";
+import { getCurrentWindow } from "@/lib/wails/window";
 import ReactDOM from "react-dom/client";
 import App from "./app/App";
 import { initLaunchDir } from "./lib/launchDir";

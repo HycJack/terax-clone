@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/api/webviewWindow`.
+ * Wails runtime wrapper: `@/lib/wails/webviewWindow`.
  * Minimal stub: there's only one webview per Wails window in v2, so
  * `getCurrentWebviewWindow()` returns the same window object.
  */

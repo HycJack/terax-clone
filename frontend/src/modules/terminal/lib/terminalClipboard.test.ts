@@ -4,7 +4,7 @@ const native = vi.hoisted(() => ({
   readText: vi.fn<() => Promise<string>>(),
   writeText: vi.fn<(t: string) => Promise<void>>(),
 }));
-vi.mock("@tauri-apps/plugin-clipboard-manager", () => native);
+vi.mock("@/lib/wails/plugin-clipboard", () => native);
 
 const web = {
   readText: vi.fn<() => Promise<string>>(),

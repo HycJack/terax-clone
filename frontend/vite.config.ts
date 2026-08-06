@@ -40,74 +40,15 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
         __dirname,
         "./src/modules/lsp/lib/protocolShim.ts",
       ),
-      // Tauri → Wails shim layer (frontend code unchanged, backend swapped).
-      "@tauri-apps/api/core": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/core.ts",
-      ),
-      "@tauri-apps/api/event": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/event.ts",
-      ),
-      "@tauri-apps/api/window": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/window.ts",
-      ),
-      "@tauri-apps/api/webview": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/webview.ts",
-      ),
-      "@tauri-apps/api/webviewWindow": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/webviewWindow.ts",
-      ),
-      "@tauri-apps/api/path": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/path.ts",
-      ),
-      "@tauri-apps/api/app": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/app.ts",
-      ),
-      "@tauri-apps/plugin-os": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-os.ts",
-      ),
-      "@tauri-apps/plugin-store": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-store.ts",
-      ),
-      "@tauri-apps/plugin-notification": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-notification.ts",
-      ),
-      "@tauri-apps/plugin-clipboard-manager": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-clipboard.ts",
-      ),
-      "@tauri-apps/plugin-opener": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-opener.ts",
-      ),
-      "@tauri-apps/plugin-autostart": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-autostart.ts",
-      ),
-      "@tauri-apps/plugin-process": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-process.ts",
-      ),
-      "@tauri-apps/plugin-updater": path.resolve(
-        __dirname,
-        "./src/lib/wails-shim/plugin-updater.ts",
-      ),
+      // Wails runtime stubs (re-export the generated wailsjs/runtime +
+      // wailsjs/go bindings so source can import them via stable names).
       "#wails/runtime/runtime": path.resolve(
         __dirname,
-        "./src/lib/wails-shim/wails-runtime-stub.ts",
+        "./src/lib/wails/wails-runtime-stub.ts",
       ),
       "#wails/runtime/window": path.resolve(
         __dirname,
-        "./src/lib/wails-shim/wails-runtime-window-stub.ts",
+        "./src/lib/wails/wails-runtime-window-stub.ts",
       ),
     },
   },

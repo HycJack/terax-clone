@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-updater`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-updater`.
  * Returns a no-op `Update` object. Real update logic lives in Go: it polls
  * the GitHub releases endpoint and applies the patch via the existing
  * installer. Frontend just shows the UI.

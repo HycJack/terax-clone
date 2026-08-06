@@ -1,4 +1,4 @@
-import { platform } from "@tauri-apps/plugin-os";
+import { platform } from "@/lib/wails/plugin-os";
 
 const PLATFORM = (() => {
   try {

@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/api/webview`.
+ * Wails runtime wrapper: `@/lib/wails/webview`.
  * Tauri webview has separate APIs from window; in Wails v2 they overlap.
  */
 import { getCurrentWebviewWindow } from "./webviewWindow";

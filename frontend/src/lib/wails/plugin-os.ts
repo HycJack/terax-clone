@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-os`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-os`.
  * The OS detection is best done at runtime by the Go side; we expose a
  * browser-platform fallback that matches the user's OS closely enough for
  * UI gating (keyboard shortcuts, window chrome, font hints).

@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/api/event`.
+ * Wails runtime wrapper: `@/lib/wails/event`.
  * Maps Tauri event names onto the Wails runtime event bus.
  *
  * CRITICAL: Wails EventsEmit wraps extra args into a `data` array:

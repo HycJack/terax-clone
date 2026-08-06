@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import {
   getProvider,
   KEYRING_SERVICE,

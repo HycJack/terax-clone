@@ -1,10 +1,10 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/api/path`.
+ * Wails runtime wrapper: `@/lib/wails/path`.
  * Delegates to the Go backend for real OS paths (home, config, data dirs).
  * Falls back to reasonable defaults if the backend call fails.
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 
 const isWindows =
   typeof navigator !== "undefined" &&

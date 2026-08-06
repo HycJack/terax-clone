@@ -13,7 +13,7 @@ function webClipboard(): Clipboard | null {
 export async function readTerminalClipboard(): Promise<string> {
   if (IS_LINUX) {
     try {
-      const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
+      const { readText } = await import("@/lib/wails/plugin-clipboard");
       return await readText();
     } catch {}
   }
@@ -27,7 +27,7 @@ export async function readTerminalClipboard(): Promise<string> {
 export async function writeTerminalClipboard(text: string): Promise<void> {
   if (IS_LINUX) {
     try {
-      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+      const { writeText } = await import("@/lib/wails/plugin-clipboard");
       await writeText(text);
       return;
     } catch {}

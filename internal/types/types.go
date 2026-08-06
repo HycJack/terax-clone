@@ -28,19 +28,16 @@ type WorkspaceEnv struct {
 	Cwd     string `json:"cwd"`
 }
 
-// PtyOpenArgs is the request body for the `pty_open` command. The two
-// trailing fields carry Channel attachment IDs produced by the frontend's
-// SPECIAL handler in `wails-shim/core.ts` (which renames `onData` -> `onDataEvent`
-// and `onExit` -> `onExitEvent` before crossing the bridge).
+// PtyOpenArgs is the request body for `PtyOpen`. Simple-shell-style: the
+// backend emits `pty:<id>` and `pty:exit:<id>` events on the Wails event
+// bus, and the frontend subscribes to those names directly. No Channel
+// attachment IDs are needed.
 type PtyOpenArgs struct {
 	Cols      int          `json:"cols"`
 	Rows      int          `json:"rows"`
 	Cwd       *string      `json:"cwd"`
 	Workspace WorkspaceEnv `json:"workspace"`
-	Blocks    bool         `json:"blocks"`
 	Shell     *string      `json:"shell"`
-	OnDataEvent string     `json:"onDataEvent"`
-	OnExitEvent string     `json:"onExitEvent"`
 }
 
 // LspSpawnArgs is the request body for `lsp_spawn`. The two trailing fields

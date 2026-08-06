@@ -1,4 +1,4 @@
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { revealItemInDir } from "@/lib/wails/plugin-opener";
 
 export async function copyToClipboard(text: string): Promise<void> {
   try {

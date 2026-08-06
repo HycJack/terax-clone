@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { useLspRuntimeStore } from "./runtimeStore";
 
 const pending = new Map<string, Promise<string | null>>();

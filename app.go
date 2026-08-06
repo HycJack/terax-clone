@@ -139,7 +139,7 @@ func (a *App) PtyOpen(args PtyOpenArgs) (int, error) {
 	if args.Shell != nil {
 		shell = *args.Shell
 	}
-	s, err := a.ptyMgr.Open(a.ctx, args.Cols, args.Rows, *cwd, ws.Kind, shell, args.Blocks, args.OnDataEvent, args.OnExitEvent)
+	s, err := a.ptyMgr.Open(a.ctx, args.Cols, args.Rows, *cwd, ws.Kind, shell)
 	if err != nil {
 		return 0, err
 	}
@@ -198,6 +198,15 @@ func (a *App) PtyShellName(id int) string {
 // PtyListShells returns the shells available on this machine.
 func (a *App) PtyListShells() []string {
 	return a.ptyMgr.ListShells()
+}
+
+// PtyReadOutput used to be a poll fallback for the Wails event bus. We
+// removed the outputBuf and the polling path; the new pump emits
+// `pty:<id>` events directly. The method is kept as a no-op stub so a
+// stale frontend build (calling `pty_read_output`) doesn't get a 404 —
+// it just returns nil bytes.
+func (a *App) PtyReadOutput(id int) []byte {
+	return nil
 }
 
 // =========================================================================

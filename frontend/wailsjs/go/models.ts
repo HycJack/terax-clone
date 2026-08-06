@@ -1567,10 +1567,7 @@ export namespace types {
 	    rows: number;
 	    cwd?: string;
 	    workspace: WorkspaceEnv;
-	    blocks: boolean;
 	    shell?: string;
-	    onDataEvent: string;
-	    onExitEvent: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PtyOpenArgs(source);
@@ -1582,10 +1579,7 @@ export namespace types {
 	        this.rows = source["rows"];
 	        this.cwd = source["cwd"];
 	        this.workspace = this.convertValues(source["workspace"], WorkspaceEnv);
-	        this.blocks = source["blocks"];
 	        this.shell = source["shell"];
-	        this.onDataEvent = source["onDataEvent"];
-	        this.onExitEvent = source["onExitEvent"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

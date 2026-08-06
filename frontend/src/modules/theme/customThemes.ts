@@ -1,5 +1,5 @@
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { LazyStore } from "@tauri-apps/plugin-store";
+import { emit, listen, type UnlistenFn } from "@/lib/wails/event";
+import { LazyStore } from "@/lib/wails/plugin-store";
 import type { Theme } from "./types";
 
 const STORE_PATH = "terax-custom-themes.json";

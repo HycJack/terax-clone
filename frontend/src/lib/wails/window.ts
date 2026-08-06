@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/api/window`.
+ * Wails runtime wrapper: `@/lib/wails/window`.
  * Wraps the Wails window API to expose the same `getCurrentWindow()`,
  * `Window.show/minimize/close/...` surface the frontend expects.
  */

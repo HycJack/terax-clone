@@ -102,9 +102,9 @@ import {
 import { ThemeProvider, useThemeFileEditing } from "@/modules/theme";
 // import { UpdaterDialog } from "@/modules/updater";
 import { useWorkspaceEnvStore, type WorkspaceEnv } from "@/modules/workspace";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@/lib/wails/core";
+import { listen } from "@/lib/wails/event";
+import { getCurrentWindow } from "@/lib/wails/window";
 import type { SearchAddon } from "@xterm/addon-search";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloseDialogs } from "./components/CloseDialogs";

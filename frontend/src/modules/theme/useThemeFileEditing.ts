@@ -1,6 +1,6 @@
 import { type RefObject, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@/lib/wails/core";
+import { getCurrentWebviewWindow } from "@/lib/wails/webviewWindow";
 import { setThemeId as persistThemeId } from "@/modules/settings/store";
 import type { Tab } from "@/modules/tabs";
 import { currentWorkspaceEnv } from "@/modules/workspace";

@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-notification`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-notification`.
  * Uses the browser's `Notification` API when granted; falls back to
  * `console.info` for the dev experience.
  */

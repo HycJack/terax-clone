@@ -20,7 +20,7 @@ import {
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { homeDir } from "@tauri-apps/api/path";
+import { homeDir } from "@/lib/wails/path";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type {

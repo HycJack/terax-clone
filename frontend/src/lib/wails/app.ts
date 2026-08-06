@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/api/app`.
+ * Wails runtime wrapper: `@/lib/wails/app`.
  * Reads app metadata (name, version) from a build-time constant the Go side
  * stamps into the bundle. Falls back to the package.json `name`/`version`.
  */

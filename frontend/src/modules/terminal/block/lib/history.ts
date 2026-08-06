@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 
 export function historySuggest(line: string): Promise<string | null> {
   return invoke<string | null>("history_suggest", { line }).catch(() => null);

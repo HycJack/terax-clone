@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-opener`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-opener`.
  * - `openUrl`: opens external URLs in the default browser.
  * - `openPath`: opens a local path with the OS default.
  * - `revealItemInDir`: opens the OS file explorer at the given path.

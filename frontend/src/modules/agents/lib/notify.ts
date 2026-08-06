@@ -2,7 +2,7 @@ import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
-} from "@tauri-apps/plugin-notification";
+} from "@/lib/wails/plugin-notification";
 
 let granted = false;
 

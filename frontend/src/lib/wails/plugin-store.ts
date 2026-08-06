@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-store`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-store`.
  *
  * `LazyStore` persists a JSON key/value bag to disk. In Wails we back it
  * with `localStorage` for fast access and a single debounced flush to

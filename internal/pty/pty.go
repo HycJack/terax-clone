@@ -18,7 +18,6 @@ package pty
 
 import (
 	"context"
-	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -55,34 +54,13 @@ type Session struct {
 	proc      childProc
 	procState childState
 
-	onData string
-	onExit string
-
 	// emitEvent is a stored reference to wailsruntime.EventsEmit, stored
 	// at session creation so pump goroutines always use the same function
 	// regardless of context validity after HMR.
 	emitEvent func(ctx context.Context, event string, optionalData ...interface{})
 
-	// outputBuf accumulates PTY output when pump is running.
-	// JS consumers poll via PtyReadOutput to bypass Wails event bus issues.
-	outputBuf bytes.Buffer
-	outputMu  sync.Mutex
-
 	mu     sync.Mutex
 	closed atomic.Bool
-}
-
-// ReadOutput drains and returns any accumulated PTY output since the last call.
-func (s *Session) ReadOutput() []byte {
-	s.outputMu.Lock()
-	defer s.outputMu.Unlock()
-	if s.outputBuf.Len() == 0 {
-		return nil
-	}
-	b := make([]byte, s.outputBuf.Len())
-	copy(b, s.outputBuf.Bytes())
-	s.outputBuf.Reset()
-	return b
 }
 
 // childProc is the subset of exec.Cmd we use. Defined as an interface so the
@@ -132,14 +110,14 @@ func DefaultShell() string {
 
 // Open starts a shell attached to a PTY (or plain pipes on legacy Windows).
 //
-// onDataEvent / onExitEvent are the unique event names the JS shim created
-// for the Channel wrappers; we emit raw bytes / exit codes to those names.
+// Output is forwarded to the frontend via two Wails events named
+// `pty:<id>` (per-read payload) and `pty:exit:<id>` (final exit code).
+// The frontend subscribes to those names directly; no Channel attachment
+// IDs are needed.
 func (m *Manager) Open(
 	ctx context.Context,
 	cols, rows int,
 	cwd, workspace, shell string,
-	blocks bool,
-	onDataEvent, onExitEvent string,
 ) (*Session, error) {
 	if shell == "" {
 		shell = DefaultShell()
@@ -151,11 +129,22 @@ func (m *Manager) Open(
 	}
 
 	var cmdArgs []string
+	// The shell-init integration in startChild decides the right argv per
+	// shell (bash gets --rcfile -i, PowerShell gets -File profile.ps1).
+	// We only pre-pend `-l` for POSIX shells that don't have an integration
+	// of their own — bash on macOS is the canonical case. Anything with
+	// an integration will append its own argv in startChild.
 	switch runtime.GOOS {
 	case "windows":
 		cmdArgs = nil
 	default:
-		cmdArgs = []string{"-l"}
+		if classifyShell(shell) == "bash" {
+			// bash ignores --rcfile when started with -l; rely on the
+			// rcfile to source /etc/profile and ~/.bash_profile instead.
+			cmdArgs = nil
+		} else {
+			cmdArgs = []string{"-l"}
+		}
 	}
 
 	master, child, state, err := startChild(shell, cmdArgs, cwd, cols, rows)
@@ -173,8 +162,6 @@ func (m *Manager) Open(
 		master:    master,
 		proc:      child,
 		procState: state,
-		onData:    onDataEvent,
-		onExit:    onExitEvent,
 	}
 
 	m.mu.Lock()
@@ -192,12 +179,24 @@ func (m *Manager) Open(
 // returns (master, child, state, err). The concrete backend depends on the
 // platform and the kernel's ConPTY support.
 func startChild(shell string, args []string, cwd string, cols, rows int) (io.ReadWriteCloser, childProc, childState, error) {
+	// Resolve shell-integration args/env at the top so both the ConPTY
+	// and the legacy pipeBackend paths below can apply them. The frontend
+	// uses the OSC 7 cwd + OSC 133 markers these snippets emit to keep
+	// the directory tree root in sync with the active terminal.
+	integ, _ := integrationFor(shell)
+	if len(integ.extraArgs) > 0 {
+		args = append(args, integ.extraArgs...)
+	}
+
 	if runtime.GOOS == "windows" && !hasConPTY() {
 		// Legacy Windows: kernel32 doesn't export CreatePseudoConsole.
 		// Fall back to plain pipes; no PTY semantics.
 		be, err := newPipeBackend(shell, args, cwd)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("pty start: %w", err)
+		}
+		if len(integ.extraEnv) > 0 {
+			be.cmd.Env = append(be.cmd.Env, integ.extraEnv...)
 		}
 		return be, be.cmd, execState{be.cmd}, nil
 	}
@@ -211,6 +210,9 @@ func startChild(shell string, args []string, cwd string, cols, rows int) (io.Rea
 		if runtime.GOOS == "windows" {
 			be, perr := newPipeBackend(shell, args, cwd)
 			if perr == nil {
+				if len(integ.extraEnv) > 0 {
+					be.cmd.Env = append(be.cmd.Env, integ.extraEnv...)
+				}
 				return be, be.cmd, execState{be.cmd}, nil
 			}
 		}
@@ -224,6 +226,9 @@ func startChild(shell string, args []string, cwd string, cols, rows int) (io.Rea
 	cmd := pt.Command(shell, args...)
 	cmd.Dir = cwd
 	cmd.Env = os.Environ()
+	if len(integ.extraEnv) > 0 {
+		cmd.Env = append(cmd.Env, integ.extraEnv...)
+	}
 	cmd.SysProcAttr = procAttr()
 
 	if err := cmd.Start(); err != nil {
@@ -332,41 +337,34 @@ func (m *Manager) HasForeground(id int) bool {
 }
 
 func (s *Session) pump(ctx context.Context) {
+	dataEvent := fmt.Sprintf("pty:%d", s.ID)
+	exitEvent := fmt.Sprintf("pty:exit:%d", s.ID)
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.master.Read(buf)
 		if n > 0 {
+			// simple-shell-style envelope: {"data": "<base64>"} so the JS
+			// side can decode the exact bytes the shell wrote.
 			payload := make([]byte, n)
 			copy(payload, buf[:n])
 			b64 := base64.StdEncoding.EncodeToString(payload)
-			if s.onData != "" && s.emitEvent != nil {
-				s.emitEvent(ctx, s.onData, b64)
+			if s.emitEvent != nil {
+				s.emitEvent(ctx, dataEvent, map[string]string{"data": b64})
 			}
 		}
 		if err != nil {
 			break
 		}
 	}
-	s.waitAndExit(ctx)
+	s.waitAndExit(ctx, exitEvent)
 }
 
-func (s *Session) waitAndExit(ctx context.Context) {
+func (s *Session) waitAndExit(ctx context.Context, exitEvent string) {
 	_ = s.proc.Wait()
 	code := s.procState.ExitCode()
-	if s.onExit != "" && s.emitEvent != nil {
-		s.emitEvent(ctx, s.onExit, code)
+	if s.emitEvent != nil {
+		s.emitEvent(ctx, exitEvent, code)
 	}
-}
-
-// ReadOutput drains any accumulated PTY output for a session.
-func (m *Manager) ReadOutput(id int) []byte {
-	m.mu.RLock()
-	s, ok := m.sessions[id]
-	m.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	return s.ReadOutput()
 }
 
 // Write forwards stdin bytes to a session.

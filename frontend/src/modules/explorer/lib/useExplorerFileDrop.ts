@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { invoke } from "@/lib/wails/core";
+import { getCurrentWebview } from "@/lib/wails/webview";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { currentWorkspaceEnv } from "@/modules/workspace";

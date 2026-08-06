@@ -3,7 +3,7 @@ import {
   type Completion,
   startCompletion,
 } from "@codemirror/autocomplete";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 
 type DirEntry = {
   name: string;

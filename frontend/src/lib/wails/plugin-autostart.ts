@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-autostart`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-autostart`.
  * The OS-specific autostart registration is implemented in Go (writes the
  * per-platform Run key / .desktop file / LaunchAgent). This module is just
  * a thin RPC wrapper.

@@ -13,7 +13,7 @@ import {
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@/lib/wails/plugin-opener";
 import { useState } from "react";
 import { redetectBinary } from "../lib/detect";
 import type { LspPreset } from "../lib/presets";

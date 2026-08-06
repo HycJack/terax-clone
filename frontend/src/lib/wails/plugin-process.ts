@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-process`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-process`.
  * Minimal: `relaunch()` is the only call we exercise (Updater dialog). The
  * Go side knows the executable path & arguments for self-restart.
  */

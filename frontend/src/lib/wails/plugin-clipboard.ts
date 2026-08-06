@@ -1,5 +1,5 @@
 /**
- * Tauri→Wails shim: `@tauri-apps/plugin-clipboard-manager`.
+ * Wails runtime wrapper: `@/lib/wails/plugin-clipboard`.
  * Uses the browser's navigator clipboard. Browser contexts require a secure
  * (https / localhost) origin, but Wails runs the webview from a custom
  * `http://wails.localhost` scheme so the clipboard works without HTTPS.

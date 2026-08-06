@@ -1,5 +1,5 @@
 import { currentWorkspaceEnv } from "@/modules/workspace";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { useCallback } from "react";
 import { type AsyncQueryState, useAsyncQuery } from "./useAsyncQuery";
 

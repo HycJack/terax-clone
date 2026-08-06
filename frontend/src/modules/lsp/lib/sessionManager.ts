@@ -2,7 +2,7 @@ import { usePreferencesStore } from "@/modules/settings/preferences";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { toast } from "sonner";
 import type { TeraxLspClient } from "./client";
 import { detectBinary } from "./detect";

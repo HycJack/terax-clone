@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 
 export type ReadResult =

@@ -22,7 +22,7 @@ import {
   MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/wails/core";
 import { useCallback, useEffect, useState } from "react";
 import { segmentsFromCwd } from "./lib/pathUtils";
 

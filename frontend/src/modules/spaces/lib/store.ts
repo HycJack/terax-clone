@@ -1,4 +1,4 @@
-import { LazyStore } from "@tauri-apps/plugin-store";
+import { LazyStore } from "@/lib/wails/plugin-store";
 import type { WorkspaceEnv } from "@/modules/workspace";
 import type { SerializedTab } from "./serialize";
 
