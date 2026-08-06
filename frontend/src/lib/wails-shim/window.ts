@@ -11,9 +11,8 @@ import {
   WindowToggleMaximise,
   WindowUnmaximise,
   WindowIsMaximised,
-  WindowClose,
   WindowShow,
-} from "#wails/runtime/window";
+} from "#wails/runtime/runtime";
 
 export type Theme = "light" | "dark";
 
@@ -39,7 +38,8 @@ export class Window {
   }
 
   async close(): Promise<void> {
-    await WindowClose();
+    const { EventsEmit } = await import("#wails/runtime/runtime");
+    EventsEmit("wails:close");
   }
 
   async minimize(): Promise<void> {

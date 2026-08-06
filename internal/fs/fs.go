@@ -98,6 +98,18 @@ func (m *WatcherManager) Remove(paths []string) {
 	}
 }
 
+// Close shuts down the fsnotify watcher and releases OS handles.
+func (m *WatcherManager) Close() {
+	if m.watcher == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_ = m.watcher.Close()
+	m.watcher = nil
+	m.watched = map[string]bool{}
+}
+
 func (m *WatcherManager) pump() {
 	if m.watcher == nil {
 		return

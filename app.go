@@ -15,12 +15,14 @@ import (
 	"strconv"
 
 	"terax/internal/agent"
+	"terax/internal/events"
 	"terax/internal/fs"
 	"terax/internal/git"
 	"terax/internal/lsp"
 	internalpty "terax/internal/pty"
 	internalshell "terax/internal/shell"
 	internaltype "terax/internal/types"
+	"terax/internal/winctrl"
 	"terax/internal/workspace"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -69,185 +71,11 @@ func (a *App) startup(ctx context.Context) {
 		workspace.InitLaunchCwd(wd)
 	}
 
-	// Wire the JS shim's `WindowClose` / `WindowMinimise` event hooks
-	// back to the native window manager. The shim `EventsEmit`s these
-	// names when the user clicks the custom chrome buttons.
-	wailsruntime.EventsOn(ctx, "wails:close", func(_ ...interface{}) {
-		wailsruntime.Quit(ctx)
-	})
-	wailsruntime.EventsOn(ctx, "wails:minimise", func(_ ...interface{}) {
-		wailsruntime.WindowMinimise(ctx)
-	})
+	// Wire the custom window-chrome close/minimise buttons.
+	winctrl.Register(ctx)
 
-	// =======================================================================
-	// Event-bridge for settings page: Wails v2 only injects `window['go']`
-	// into the initial HTML document. The settings page navigates via
-	// window.location.assign("/settings.html") which destroys the JS global
-	// state, so `window['go']` is lost. `window.runtime` survives the
-	// navigation, so we expose backend operations via EventsEmit/EventsOn.
-	// =======================================================================
-
-	// store:load { path } — replies via store:load:result
-	wailsruntime.EventsOn(ctx, "store:load", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		if m, ok := args[0].(map[string]interface{}); ok {
-			path, _ := m["path"].(string)
-			if path != "" {
-				data, err := storeLoad(path)
-				if err != nil {
-					wailsruntime.EventsEmit(ctx, "store:load:result", map[string]interface{}{
-						"success": false,
-						"error":   err.Error(),
-					})
-					return
-				}
-				wailsruntime.EventsEmit(ctx, "store:load:result", map[string]interface{}{
-					"success": true,
-					"data":    data,
-				})
-			}
-		}
-	})
-
-	// store:save { path, data }
-	wailsruntime.EventsOn(ctx, "store:save", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		if m, ok := args[0].(map[string]interface{}); ok {
-			path, _ := m["path"].(string)
-			rawData, _ := m["data"].(map[string]interface{})
-			if path != "" {
-				if err := storeSave(path, rawData); err != nil {
-					wailsruntime.EventsEmit(ctx, "store:save:result", map[string]interface{}{
-						"success": false,
-						"error":   err.Error(),
-					})
-					return
-				}
-				wailsruntime.EventsEmit(ctx, "store:save:result", map[string]interface{}{
-					"success": true,
-				})
-			}
-		}
-	})
-
-
-	// secrets:set { service, account, password }
-	wailsruntime.EventsOn(ctx, "secrets:set", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		if m, ok := args[0].(map[string]interface{}); ok {
-			service, _ := m["service"].(string)
-			account, _ := m["account"].(string)
-			password, _ := m["password"].(string)
-			if account != "" && password != "" {
-				if err := secretsSet(service, account, password); err != nil {
-					wailsruntime.LogError(ctx, fmt.Sprintf("secrets:set failed: %v", err))
-					wailsruntime.EventsEmit(ctx, "secrets:set:result", map[string]interface{}{
-						"success": false,
-						"error":   err.Error(),
-					})
-					return
-				}
-				wailsruntime.EventsEmit(ctx, "secrets:set:result", map[string]interface{}{
-					"success": true,
-				})
-			}
-		}
-	})
-
-	// secrets:get { service, account } — replies via secrets:get:result
-	wailsruntime.EventsOn(ctx, "secrets:get", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		if m, ok := args[0].(map[string]interface{}); ok {
-			service, _ := m["service"].(string)
-			account, _ := m["account"].(string)
-			if account != "" {
-				v, err := secretsGet(service, account)
-				if err != nil {
-					wailsruntime.EventsEmit(ctx, "secrets:get:result", map[string]interface{}{
-						"account": account,
-						"success": false,
-						"error":   err.Error(),
-					})
-					return
-				}
-				wailsruntime.EventsEmit(ctx, "secrets:get:result", map[string]interface{}{
-					"account": account,
-					"success": true,
-					"value":   v,
-				})
-			}
-		}
-	})
-
-	// secrets:delete { service, account }
-	wailsruntime.EventsOn(ctx, "secrets:delete", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		if m, ok := args[0].(map[string]interface{}); ok {
-			service, _ := m["service"].(string)
-			account, _ := m["account"].(string)
-			if account != "" {
-				if err := secretsDelete(service, account); err != nil {
-					wailsruntime.EventsEmit(ctx, "secrets:delete:result", map[string]interface{}{
-						"account": account,
-						"success": false,
-						"error":   err.Error(),
-					})
-					return
-				}
-				wailsruntime.EventsEmit(ctx, "secrets:delete:result", map[string]interface{}{
-					"account": account,
-					"success": true,
-				})
-			}
-		}
-	})
-
-	// secrets:getAll { service, accounts: ["a", "b"] }
-	wailsruntime.EventsOn(ctx, "secrets:getAll", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		if m, ok := args[0].(map[string]interface{}); ok {
-			service, _ := m["service"].(string)
-			rawAccounts, _ := m["accounts"].([]interface{})
-			accounts := make([]string, 0, len(rawAccounts))
-			for _, a := range rawAccounts {
-				if s, ok := a.(string); ok {
-					accounts = append(accounts, s)
-				}
-			}
-			if len(accounts) > 0 {
-				values, err := secretsGetAll(service, accounts)
-				if err != nil {
-					wailsruntime.EventsEmit(ctx, "secrets:getAll:result", map[string]interface{}{
-						"success": false,
-						"error":   err.Error(),
-					})
-					return
-				}
-				out := make([]interface{}, len(values))
-				for i, v := range values {
-					out[i] = v
-				}
-				wailsruntime.EventsEmit(ctx, "secrets:getAll:result", map[string]interface{}{
-					"success": true,
-					"values":  out,
-					"accounts": accounts,
-				})
-			}
-		}
-	})
-
+	// Event-bridge for settings page: store/secrets ops via EventsEmit/EventsOn.
+	events.RegisterAll(ctx)
 }
 
 // shutdown is called when the app is exiting.
@@ -257,6 +85,9 @@ func (a *App) shutdown(_ context.Context) {
 	}
 	if a.lspMgr != nil {
 		a.lspMgr.KillAll()
+	}
+	if a.fsWatcher != nil {
+		a.fsWatcher.Close()
 	}
 }
 
@@ -331,9 +162,9 @@ func (a *App) PtyWrite(args PtyWriteArgs) error {
 
 // PtyResizeArgs is the request body for PtyResize.
 type PtyResizeArgs struct {
-	ID    int `json:"id"`
-	Cols  int `json:"cols"`
-	Rows  int `json:"rows"`
+	ID   int `json:"id"`
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
 }
 
 // PtyResize changes the PTY geometry.
@@ -362,7 +193,7 @@ func (a *App) PtyHasForegroundJob(id int) bool {
 	return a.ptyMgr.HasForeground(id)
 }
 
-// PtyShellName returns the executable name (pwsh, zsh, ...).
+// PtyShellName returns the executable name (pwsh, zsh, ...) for a session.
 func (a *App) PtyShellName(id int) string {
 	return a.ptyMgr.ShellName(id)
 }

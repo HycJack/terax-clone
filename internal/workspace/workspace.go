@@ -198,11 +198,14 @@ func TranslateWSLPath(p string) string {
 		return p
 	}
 	parts := strings.SplitN(strings.TrimPrefix(strings.TrimPrefix(p, "\\\\wsl$\\"), "\\\\wsl.localhost\\"), "\\", 2)
-	if len(parts) < 2 {
+	if len(parts) < 2 || parts[1] == "" {
 		return p
 	}
 	_ = parts[0]
 	rest := strings.ReplaceAll(parts[1], "\\", "/")
+	if rest == "" {
+		return p
+	}
 	return "/mnt/" + strings.ToLower(string(rest[0])) + rest[1:]
 }
 
@@ -217,8 +220,9 @@ func IsAuthorized(p string) bool {
 	if allowed[abs] {
 		return true
 	}
+	sep := string(filepath.Separator)
 	for a := range allowed {
-		if strings.HasPrefix(abs, a) {
+		if strings.HasPrefix(abs, a+sep) || abs == a {
 			return true
 		}
 	}

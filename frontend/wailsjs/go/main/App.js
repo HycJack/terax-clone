@@ -290,10 +290,6 @@ export function PtyOpen(arg1) {
   return window['go']['main']['App']['PtyOpen'](arg1);
 }
 
-export function PtyReadOutput(arg1) {
-  return window['go']['main']['App']['PtyReadOutput'](arg1);
-}
-
 export function PtyResize(arg1) {
   return window['go']['main']['App']['PtyResize'](arg1);
 }

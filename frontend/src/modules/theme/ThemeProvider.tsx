@@ -110,7 +110,7 @@ export function ThemeProvider({ children, defaultMode = "system" }: ThemeProvide
     let alive = true;
     void listCustomThemes().then((list) => { if (alive) setCustomThemes(list); });
     const unlisten = onCustomThemesChange(() => {
-      void listCustomThemes().then((list) => setCustomThemes(list));
+      void listCustomThemes().then((list) => { if (alive) setCustomThemes(list); });
     });
     return () => {
       alive = false;

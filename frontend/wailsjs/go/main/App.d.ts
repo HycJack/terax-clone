@@ -149,8 +149,6 @@ export function PtyListShells():Promise<Array<string>>;
 
 export function PtyOpen(arg1:types.PtyOpenArgs):Promise<number>;
 
-export function PtyReadOutput(arg1:number):Promise<Array<number>>;
-
 export function PtyResize(arg1:main.PtyResizeArgs):Promise<void>;
 
 export function PtyShellName(arg1:number):Promise<string>;

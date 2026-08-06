@@ -105,6 +105,12 @@ async function proxyFetchImpl(
             },
             cancel() {
               cancelled = true;
+              // Notify the backend to abort the in-flight HTTP request so
+              // it doesn't keep consuming CPU/network for a response nobody
+              // will read.
+              if (signal && !signal.aborted) {
+                try { signal.dispatchEvent(new Event("abort")); } catch { /* ignore */ }
+              }
             },
           });
           resolved = true;

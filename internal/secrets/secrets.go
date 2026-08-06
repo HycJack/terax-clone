@@ -35,7 +35,10 @@ func Service() string {
 
 // Get returns the stored password or "" if missing.
 func Get(account string) (string, error) {
-	v, err := keyring.Get(service, account)
+	mu.Lock()
+	svc := service
+	mu.Unlock()
+	v, err := keyring.Get(svc, account)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return "", nil
@@ -47,12 +50,18 @@ func Get(account string) (string, error) {
 
 // Set stores a password under (service, account).
 func Set(account, password string) error {
-	return keyring.Set(service, account, password)
+	mu.Lock()
+	svc := service
+	mu.Unlock()
+	return keyring.Set(svc, account, password)
 }
 
 // Delete removes the password under (service, account).
 func Delete(account string) error {
-	err := keyring.Delete(service, account)
+	mu.Lock()
+	svc := service
+	mu.Unlock()
+	err := keyring.Delete(svc, account)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return nil
 	}

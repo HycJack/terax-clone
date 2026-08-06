@@ -348,7 +348,9 @@ export const useChatStore = create<StoreState>((set, get) => ({
     }
     void loadMessages(id).then((m) => {
       if (m && m.length > 0 && !chats.has(id)) seedMessages.set(id, m);
-      flip();
+      // Only flip if the user hasn't switched to another session while
+      // loadMessages was in flight.
+      if (get().activeSessionId === id) flip();
     });
   },
 

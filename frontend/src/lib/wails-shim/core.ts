@@ -260,7 +260,11 @@ export async function invoke<T = unknown>(
     typeof (window as unknown as Record<string, unknown>)['go'] !== 'undefined';
 
   if (!goAvailable) {
-    return (await invokeViaEventBridge<T>(cmd, payload)) as T;
+    try {
+      return (await invokeViaEventBridge<T>(cmd, payload)) as T;
+    } finally {
+      detachChannels(cmd, raw);
+    }
   }
 
   try {

@@ -63,6 +63,12 @@ func RunInSession(m *Manager, args types.ShellSessionRunArgs) (*types.ShellSessi
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 
+	// Re-check under lock — CloseSession may have deleted and marked closed
+	// between our RUnlock and Lock.
+	if sess.closed.Load() {
+		return nil, errors.New("session closed")
+	}
+
 	cwd := args.Cwd
 	if cwd == "" {
 		cwd = sess.cwd
@@ -181,6 +187,7 @@ func BgSpawn(ctx context.Context, m *Manager, args types.ShellBgSpawnArgs) (int,
 	m.jobs[id] = job
 	m.mu.Unlock()
 	go func() {
+		defer stdout.Close()
 		buf := make([]byte, 4096)
 		for {
 			n, err := stdout.Read(buf)
@@ -500,11 +507,14 @@ func shellName(path string) string {
 }
 
 // quoteShell quotes a path for use as a cd argument. Uses double quotes
-// on Windows, single quotes on Unix.
+// on Windows, single quotes on Unix (with embedded quote escaping).
 func quoteShell(path string) string {
 	if runtime.GOOS == "windows" {
 		path = strings.ReplaceAll(path, "/", "\\")
 		return "\"" + path + "\""
 	}
-	return "'" + path + "'"
+	// In bash, single quotes prevent all interpretation. To include a
+	// literal single quote, end the quoted string, add an escaped quote,
+	// and start a new quoted string: 'it'\''s' → it's
+	return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
 }
