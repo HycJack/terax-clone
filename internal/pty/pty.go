@@ -332,8 +332,6 @@ func (m *Manager) HasForeground(id int) bool {
 }
 
 func (s *Session) pump(ctx context.Context) {
-	// Debug: verify onData is set
-	fmt.Printf("[terax-debug] pump: s.onData=%q s.onExit=%q\n", s.onData, s.onExit)
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.master.Read(buf)
@@ -341,7 +339,6 @@ func (s *Session) pump(ctx context.Context) {
 			payload := make([]byte, n)
 			copy(payload, buf[:n])
 			b64 := base64.StdEncoding.EncodeToString(payload)
-			fmt.Printf("[terax-debug] pump: emitting %d bytes to %q b64[:30]=%s\n", n, s.onData, b64[:min(30, len(b64))])
 			if s.onData != "" && s.emitEvent != nil {
 				s.emitEvent(ctx, s.onData, b64)
 			}

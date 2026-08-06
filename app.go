@@ -35,7 +35,6 @@ type App struct {
 	fsWatcher *fs.WatcherManager
 	lspMgr    *lsp.Manager
 	bgMgr     *internalshell.Manager
-	eventsEmit func(ctx context.Context, event string, optionalData ...interface{})
 }
 
 // PtyManager is an alias so we can share with shell pkg.
@@ -48,7 +47,6 @@ func NewApp() *App {
 		fsWatcher: fs.NewWatcherManager(),
 		lspMgr:    lsp.NewManager(),
 		bgMgr:     internalshell.NewManager(),
-		eventsEmit: wailsruntime.EventsEmit,
 	}
 }
 
@@ -133,11 +131,10 @@ func (a *App) PtyOpen(args PtyOpenArgs) (int, error) {
 		cwd = &v
 	}
 	if cwd == nil || *cwd == "" {
-		fallback := "C:/Users/huangyicao"
-		cwd = &fallback
-		fmt.Printf("[terax-debug] PtyOpen: cwd empty, using fallback %s\n", fallback)
+		// No cwd available from workspace or current dir; surface a clear
+		// error rather than silently falling back to a hard-coded path.
+		return 0, fmt.Errorf("pty open: no working directory available")
 	}
-	fmt.Printf("[terax-debug] PtyOpen: cwd=%s cols=%d rows=%d blocks=%v shell=%s\n", *cwd, args.Cols, args.Rows, args.Blocks, func() string { if args.Shell != nil { return *args.Shell }; return "" }())
 	shell := ""
 	if args.Shell != nil {
 		shell = *args.Shell
