@@ -416,7 +416,7 @@ func killProcessTree(pid int) error {
 		if err != nil {
 			return err
 		}
-		return p.Kill()
+		return killProcessTreeWindows(p)
 	}
 	return unixKillGroup(pid)
 }

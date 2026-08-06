@@ -95,6 +95,10 @@
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
+  "imports": {
+    "#wails/runtime/runtime": "./src/lib/wails-shim/wails-runtime-stub.ts",
+    "#wails/go/models": "./wailsjs/go/models.ts"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
     "@size-limit/file": "^12.1.0",

@@ -543,6 +543,10 @@ async function openPtyForSession(
     {
       onData: (bytes) => deliverPtyBytes(leafId, bytes),
       onExit: (code) => {
+        // Guard: only clean up if this PTY is still the active one. A
+        // respawn may have already replaced s.pty with a new instance;
+        // the old handler's exit event should not clobber the new one.
+        if (s.pty?.id !== pty.id) return;
         s.shellExited = true;
         s.pty = null;
         s.pendingInput = "";

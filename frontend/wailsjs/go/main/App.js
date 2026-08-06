@@ -110,14 +110,6 @@ export function FsWriteFile(arg1) {
   return window['go']['main']['App']['FsWriteFile'](arg1);
 }
 
-export function GetLaunchDir() {
-  return window['go']['main']['App']['GetLaunchDir']();
-}
-
-export function GetLaunchFiles() {
-  return window['go']['main']['App']['GetLaunchFiles']();
-}
-
 export function GitCheckoutBranch(arg1) {
   return window['go']['main']['App']['GitCheckoutBranch'](arg1);
 }
@@ -266,40 +258,12 @@ export function ProcessRelaunch() {
   return window['go']['main']['App']['ProcessRelaunch']();
 }
 
-export function PtyClose(arg1) {
-  return window['go']['main']['App']['PtyClose'](arg1);
-}
-
-export function PtyCloseAll() {
-  return window['go']['main']['App']['PtyCloseAll']();
-}
-
-export function PtyHasForegroundJob(arg1) {
-  return window['go']['main']['App']['PtyHasForegroundJob'](arg1);
-}
-
-export function PtyHasForegroundProcess(arg1) {
-  return window['go']['main']['App']['PtyHasForegroundProcess'](arg1);
-}
-
 export function PtyListShells() {
   return window['go']['main']['App']['PtyListShells']();
 }
 
-export function PtyOpen(arg1) {
-  return window['go']['main']['App']['PtyOpen'](arg1);
-}
-
-export function PtyResize(arg1) {
-  return window['go']['main']['App']['PtyResize'](arg1);
-}
-
 export function PtyShellName(arg1) {
   return window['go']['main']['App']['PtyShellName'](arg1);
-}
-
-export function PtyWrite(arg1) {
-  return window['go']['main']['App']['PtyWrite'](arg1);
 }
 
 export function SecretsDelete(arg1) {

@@ -366,36 +366,6 @@ export namespace main {
 	        this.code = source["code"];
 	    }
 	}
-	export class PtyResizeArgs {
-	    id: number;
-	    cols: number;
-	    rows: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new PtyResizeArgs(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.cols = source["cols"];
-	        this.rows = source["rows"];
-	    }
-	}
-	export class PtyWriteArgs {
-	    id: number;
-	    data: number[];
-	
-	    static createFrom(source: any = {}) {
-	        return new PtyWriteArgs(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.data = source["data"];
-	    }
-	}
 	export class SecretsDeleteArgs {
 	    service: string;
 	    account: string;
@@ -1541,50 +1511,6 @@ export namespace types {
 	        this.maxRssMb = source["maxRssMb"];
 	        this.workspace = this.convertValues(source["workspace"], WorkspaceEnv);
 	        this.onMessageEvent = source["onMessageEvent"];
-	        this.onExitEvent = source["onExitEvent"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class PtyOpenArgs {
-	    cols: number;
-	    rows: number;
-	    cwd?: string;
-	    workspace: WorkspaceEnv;
-	    blocks: boolean;
-	    shell?: string;
-	    onDataEvent: string;
-	    onExitEvent: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PtyOpenArgs(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.cols = source["cols"];
-	        this.rows = source["rows"];
-	        this.cwd = source["cwd"];
-	        this.workspace = this.convertValues(source["workspace"], WorkspaceEnv);
-	        this.blocks = source["blocks"];
-	        this.shell = source["shell"];
-	        this.onDataEvent = source["onDataEvent"];
 	        this.onExitEvent = source["onExitEvent"];
 	    }
 	

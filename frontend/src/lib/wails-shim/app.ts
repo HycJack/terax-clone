@@ -33,7 +33,7 @@ export async function hide(): Promise<void> {
 }
 
 export async function show(): Promise<void> {
-  const { WindowShow } = await import("#wails/runtime/window");
+  const { WindowShow } = await import("#wails/runtime/runtime");
   await WindowShow();
 }
 

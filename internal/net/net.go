@@ -61,7 +61,7 @@ func AiHTTPRequest(ctx context.Context, args types.AiHttpRequestArgs) (map[strin
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10 MB cap
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +112,12 @@ func AiHTTPStream(ctx context.Context, args types.AiHttpStreamArgs) error {
 	})
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1 MB cap on error body
 		wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{
 			Kind:    "error",
 			Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)),
 		})
+		wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
@@ -134,6 +135,7 @@ func AiHTTPStream(ctx context.Context, args types.AiHttpStreamArgs) error {
 				return nil
 			}
 			wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
+			wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
 			return err
 		}
 	}

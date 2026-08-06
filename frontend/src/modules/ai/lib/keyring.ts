@@ -35,7 +35,8 @@ export async function getKey(provider: ProviderId): Promise<string | null> {
       account: getProvider(provider).keyringAccount,
     });
     return v && v.length > 0 ? v : null;
-  } catch {
+  } catch (e) {
+    console.warn(`keyring: failed to get key for ${provider}:`, e);
     return null;
   }
 }
@@ -60,8 +61,8 @@ export async function clearKey(provider: ProviderId): Promise<void> {
       service: KEYRING_SERVICE,
       account: getProvider(provider).keyringAccount,
     });
-  } catch {
-    // already absent — fine
+  } catch (e) {
+    console.warn(`keyring: failed to clear key for ${provider}:`, e);
   }
 }
 
@@ -78,7 +79,8 @@ export async function getAllKeys(): Promise<ProviderKeys> {
       out[p.id] = v && v.length > 0 ? v : null;
     });
     return out;
-  } catch {
+  } catch (e) {
+    console.warn(`keyring: secrets_get_all failed, falling back to individual gets:`, e);
     const entries = await Promise.all(
       need.map(async (p) => [p.id, await getKey(p.id)] as const),
     );
@@ -104,7 +106,8 @@ export async function getCustomEndpointKey(
       account: compatKeyringAccount(endpointId),
     });
     return v && v.length > 0 ? v : null;
-  } catch {
+  } catch (e) {
+    console.warn(`keyring: failed to get custom endpoint key for ${endpointId}:`, e);
     return null;
   }
 }
@@ -130,7 +133,9 @@ export async function clearCustomEndpointKey(
       service: KEYRING_SERVICE,
       account: compatKeyringAccount(endpointId),
     });
-  } catch {}
+  } catch (e) {
+    console.warn(`keyring: failed to clear custom endpoint key for ${endpointId}:`, e);
+  }
 }
 
 export async function getAllCustomEndpointKeys(
@@ -148,7 +153,8 @@ export async function getAllCustomEndpointKeys(
       const v = results[i];
       out[e.id] = v && v.length > 0 ? v : null;
     });
-  } catch {
+  } catch (e) {
+    console.warn(`keyring: secrets_get_all failed for custom endpoints, falling back:`, e);
     for (const e of endpoints) {
       out[e.id] = await getCustomEndpointKey(e.id);
     }

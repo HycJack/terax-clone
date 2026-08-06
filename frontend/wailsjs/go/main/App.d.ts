@@ -59,10 +59,6 @@ export function FsWatchRemove(arg1:types.FsWatchArgs):Promise<void>;
 
 export function FsWriteFile(arg1:types.FsWriteArgs):Promise<void>;
 
-export function GetLaunchDir():Promise<any>;
-
-export function GetLaunchFiles():Promise<Array<string>>;
-
 export function GitCheckoutBranch(arg1:main.GitCheckoutBranchArgs):Promise<void>;
 
 export function GitCommit(arg1:main.GitCommitArgs):Promise<types.GitCommitResult>;
@@ -137,23 +133,9 @@ export function ProcessExit(arg1:main.ProcessExitArgs):Promise<void>;
 
 export function ProcessRelaunch():Promise<void>;
 
-export function PtyClose(arg1:number):Promise<void>;
-
-export function PtyCloseAll():Promise<void>;
-
-export function PtyHasForegroundJob(arg1:number):Promise<boolean>;
-
-export function PtyHasForegroundProcess(arg1:number):Promise<boolean>;
-
 export function PtyListShells():Promise<Array<string>>;
 
-export function PtyOpen(arg1:types.PtyOpenArgs):Promise<number>;
-
-export function PtyResize(arg1:main.PtyResizeArgs):Promise<void>;
-
 export function PtyShellName(arg1:number):Promise<string>;
-
-export function PtyWrite(arg1:main.PtyWriteArgs):Promise<void>;
 
 export function SecretsDelete(arg1:main.SecretsDeleteArgs):Promise<void>;
 

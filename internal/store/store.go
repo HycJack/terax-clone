@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -46,7 +47,10 @@ func Load(args LoadArgs) (map[string]interface{}, error) {
 	if dir == "" {
 		return map[string]interface{}{}, nil
 	}
-	p := filepath.Join(dir, args.Path+".json")
+	p, err := safePath(dir, args.Path)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -68,7 +72,10 @@ func Save(args SaveArgs) error {
 	if dir == "" {
 		return errors.New("store dir not initialized")
 	}
-	p := filepath.Join(dir, args.Path+".json")
+	p, err := safePath(dir, args.Path)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
@@ -82,4 +89,23 @@ func Save(args SaveArgs) error {
 		return err
 	}
 	return os.Rename(tmp, p)
+}
+
+// safePath joins dir + path.json and validates the result stays inside dir.
+func safePath(dir, path string) (string, error) {
+	if path == "" {
+		return "", errors.New("empty path")
+	}
+	// Reject path traversal attempts.
+	if strings.Contains(path, "..") || strings.ContainsAny(path, "/\\") {
+		return "", errors.New("invalid path: no separators or .. allowed")
+	}
+	p := filepath.Join(dir, path+".json")
+	// Final check: resolved path must be inside dir.
+	absDir, _ := filepath.Abs(dir)
+	absP, _ := filepath.Abs(p)
+	if !strings.HasPrefix(absP, absDir+string(filepath.Separator)) && absP != absDir {
+		return "", errors.New("path escapes store directory")
+	}
+	return p, nil
 }

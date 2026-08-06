@@ -237,13 +237,10 @@ func DiffContent(ctx context.Context, repo, path string, staged bool, originalPa
 	if err != nil {
 		return types.GitDiffContentResult{}, err
 	}
-	// Without an internal diff parser we surface the unified patch as
-	// the fallback and report empty original/modified content; the
-	// frontend's renderer falls back to displaying the patch when
-	// `originalContent`/`modifiedContent` are empty.
+	orig, mod := parseUnifiedDiff(text)
 	return types.GitDiffContentResult{
-		OriginalContent: "",
-		ModifiedContent: "",
+		OriginalContent: orig,
+		ModifiedContent: mod,
 		IsBinary:        false,
 		FallbackPatch:   text,
 		Truncated:       false,
@@ -485,18 +482,24 @@ func CommitFileDiff(ctx context.Context, repo, sha, path, originalPath string) (
 		if err != nil {
 			return types.GitDiffContentResult{}, err
 		}
+		orig, mod := parseUnifiedDiff(text)
 		return types.GitDiffContentResult{
-			FallbackPatch: text,
-			Truncated:     false,
+			OriginalContent: orig,
+			ModifiedContent: mod,
+			FallbackPatch:   text,
+			Truncated:       false,
 		}, nil
 	}
 	text, err := run(ctx, repo, "show", "--no-color", "--no-ext-diff", sha, "--", path)
 	if err != nil {
 		return types.GitDiffContentResult{}, err
 	}
+	orig, mod := parseUnifiedDiff(text)
 	return types.GitDiffContentResult{
-		FallbackPatch: text,
-		Truncated:     false,
+		OriginalContent: orig,
+		ModifiedContent: mod,
+		FallbackPatch:   text,
+		Truncated:       false,
 	}, nil
 }
 
@@ -561,4 +564,46 @@ func CheckoutBranch(ctx context.Context, repo, name string) error {
 // fields so the struct literal can stay readable.
 func ptr(s string) *string {
 	return &s
+}
+
+// parseUnifiedDiff splits a unified diff into original and modified content.
+// Lines starting with '-' go to original, '+' to modified, and context lines
+// (starting with ' ' or no prefix) go to both. The diff header and hunk
+// headers are skipped.
+func parseUnifiedDiff(text string) (original, modified string) {
+	var origLines, modLines []string
+	for _, line := range strings.Split(text, "\n") {
+		// Skip diff headers and hunk headers.
+		if strings.HasPrefix(line, "diff --git ") ||
+			strings.HasPrefix(line, "index ") ||
+			strings.HasPrefix(line, "--- ") ||
+			strings.HasPrefix(line, "+++ ") ||
+			strings.HasPrefix(line, "@@ ") {
+			continue
+		}
+		// "\ No newline at end of file" — skip.
+		if line == `\ No newline at end of file` {
+			continue
+		}
+		if len(line) == 0 {
+			continue
+		}
+		switch line[0] {
+		case '-':
+			// Removed line — goes to original only.
+			origLines = append(origLines, line[1:])
+		case '+':
+			// Added line — goes to modified only.
+			modLines = append(modLines, line[1:])
+		default:
+			// Context line (starts with ' ' or is empty after header skips).
+			content := line
+			if line[0] == ' ' {
+				content = line[1:]
+			}
+			origLines = append(origLines, content)
+			modLines = append(modLines, content)
+		}
+	}
+	return strings.Join(origLines, "\n"), strings.Join(modLines, "\n")
 }
