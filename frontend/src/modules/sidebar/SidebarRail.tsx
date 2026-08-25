@@ -48,8 +48,8 @@ export function SidebarRail({ activeView, onSelectView, changedCount }: Props) {
               "group relative flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md text-[11px] font-medium outline-none transition-colors duration-[var(--dur-base)]",
               "focus-visible:ring-2 focus-visible:ring-primary/40",
               isActive
-                ? "bg-foreground/[0.07] text-foreground dark:bg-foreground/[0.09]"
-                : "text-muted-foreground hover:bg-foreground/[0.045] hover:text-foreground",
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
             <HugeiconsIcon
