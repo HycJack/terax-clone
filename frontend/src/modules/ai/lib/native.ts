@@ -143,6 +143,11 @@ export const native = {
       path,
       workspace: currentWorkspaceEnv(),
     }),
+  workspaceSetCwd: (path: string) =>
+    invoke<void>("workspace_set_cwd", {
+      path,
+      workspace: currentWorkspaceEnv(),
+    }),
   readFile: (path: string) =>
     invoke<ReadResult>("fs_read_file", {
       path,

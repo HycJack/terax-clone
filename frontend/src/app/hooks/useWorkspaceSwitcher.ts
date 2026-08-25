@@ -68,6 +68,11 @@ export function useWorkspaceSwitcher({
     setLaunchCwd(nextHome);
     try {
       await native.workspaceAuthorize(nextHome);
+      // Authorize alone only marks the dir allowed; it never moves the
+      // backend's global cwd (Authorize sets cwd only when empty). Swap
+      // cwd explicitly so CurrentDir — default for the dir picker and the
+      // fallback for new PTYs — follows the switched-to workspace.
+      await native.workspaceSetCwd(nextHome);
     } catch {
       // Non-fatal — git panel will surface "not authorized" if needed.
     }
