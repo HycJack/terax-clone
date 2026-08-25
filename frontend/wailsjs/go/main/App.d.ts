@@ -155,6 +155,8 @@ export function PtyResize(arg1:main.PtyResizeArgs):Promise<void>;
 
 export function PtyShellName(arg1:number):Promise<string>;
 
+export function PtyStart(arg1:main.PtyStartArgs):Promise<void>;
+
 export function PtyWrite(arg1:main.PtyWriteArgs):Promise<void>;
 
 export function SecretsDelete(arg1:main.SecretsDeleteArgs):Promise<void>;
@@ -192,6 +194,8 @@ export function WorkspaceAuthorize(arg1:main.WorkspaceAuthorizeArgs):Promise<voi
 export function WorkspaceCurrentDir():Promise<string>;
 
 export function WorkspacePickDirectory():Promise<string>;
+
+export function WorkspaceSetCwd(arg1:main.WorkspaceSetCwdArgs):Promise<void>;
 
 export function WslDefaultDistro():Promise<string>;
 

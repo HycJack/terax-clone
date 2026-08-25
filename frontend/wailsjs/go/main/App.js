@@ -302,6 +302,10 @@ export function PtyShellName(arg1) {
   return window['go']['main']['App']['PtyShellName'](arg1);
 }
 
+export function PtyStart(arg1) {
+  return window['go']['main']['App']['PtyStart'](arg1);
+}
+
 export function PtyWrite(arg1) {
   return window['go']['main']['App']['PtyWrite'](arg1);
 }
@@ -376,6 +380,10 @@ export function WorkspaceCurrentDir() {
 
 export function WorkspacePickDirectory() {
   return window['go']['main']['App']['WorkspacePickDirectory']();
+}
+
+export function WorkspaceSetCwd(arg1) {
+  return window['go']['main']['App']['WorkspaceSetCwd'](arg1);
 }
 
 export function WslDefaultDistro() {

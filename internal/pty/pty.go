@@ -59,8 +59,9 @@ type Session struct {
 	// regardless of context validity after HMR.
 	emitEvent func(ctx context.Context, event string, optionalData ...interface{})
 
-	mu     sync.Mutex
-	closed atomic.Bool
+	mu      sync.Mutex
+	closed  atomic.Bool
+	started atomic.Bool
 }
 
 // childProc is the subset of exec.Cmd we use. Defined as an interface so the
@@ -169,10 +170,33 @@ func (m *Manager) Open(
 	m.mu.Unlock()
 
 	sess.emitEvent = wailsruntime.EventsEmit
-	// Store context at creation so pump goroutine always uses the
-	// context that was valid when the session was opened (not after HMR).
-	go sess.pump(ctx)
+	// Never pump here. `Start` launches the pump only after the frontend
+	// has subscribed to `pty:<id>`, so early shell output (banner + first
+	// prompt + OSC 7/133 markers that sync the directory tree) can't race
+	// ahead of Wails's unbuffered event bus and be dropped.
 	return sess, nil
+}
+
+// Start begins forwarding a session to a fresh pump goroutine. Idempotent.
+// It must be called AFTER the frontend has registered its `pty:<id>` listener
+// so the shell's startup bytes aren't lost on the unbuffered event bus.
+func (s *Session) Start(ctx context.Context) {
+	if s.started.Swap(true) {
+		return
+	}
+	go s.pump(ctx)
+}
+
+// Start signals a session's pump. No-op when already running.
+func (m *Manager) Start(ctx context.Context, id int) error {
+	m.mu.RLock()
+	s, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("session %d not found", id)
+	}
+	s.Start(ctx)
+	return nil
 }
 
 // startChild spawns the shell, attaches its stdio to a master endpoint and

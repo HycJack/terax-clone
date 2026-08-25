@@ -82,6 +82,12 @@ export async function openPty(
     handlers.onExit?.(c);
   });
 
+  // Listeners for `pty:<id>` are now registered. Only now is it safe to
+  // start the backend pump — Wails' event bus has no buffering, so any
+  // output emitted before this subscription is silently dropped (this is
+  // what made the shell banner/prompt disappear on startup).
+  await invoke("pty_start", { id });
+
   let closed = false;
   return {
     id,

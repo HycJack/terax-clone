@@ -382,6 +382,18 @@ export namespace main {
 	        this.rows = source["rows"];
 	    }
 	}
+	export class PtyStartArgs {
+	    id: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PtyStartArgs(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	    }
+	}
 	export class PtyWriteArgs {
 	    id: number;
 	    data: number[];
@@ -471,6 +483,18 @@ export namespace main {
 	
 	    static createFrom(source: any = {}) {
 	        return new WorkspaceAuthorizeArgs(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	    }
+	}
+	export class WorkspaceSetCwdArgs {
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceSetCwdArgs(source);
 	    }
 	
 	    constructor(source: any = {}) {

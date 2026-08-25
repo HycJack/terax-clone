@@ -169,6 +169,18 @@ func (a *App) PtyResize(args PtyResizeArgs) error {
 	return a.ptyMgr.Resize(args.ID, args.Cols, args.Rows)
 }
 
+// PtyStartArgs is the request body for PtyStart.
+type PtyStartArgs struct {
+	ID int `json:"id"`
+}
+
+// PtyStart begins forwarding PTY output. The frontend must subscribe to the
+// `pty:<id>` event BEFORE calling this, so shell startup bytes don't race
+// ahead of the unbuffered Wails event bus and get dropped.
+func (a *App) PtyStart(args PtyStartArgs) error {
+	return a.ptyMgr.Start(a.ctx, args.ID)
+}
+
 // PtyClose terminates a PTY session.
 func (a *App) PtyClose(id int) error {
 	a.ptyMgr.Close(id)
@@ -787,6 +799,19 @@ func (a *App) WorkspaceAuthorize(args WorkspaceAuthorizeArgs) error {
 // WorkspaceCurrentDir returns the active cwd.
 func (a *App) WorkspaceCurrentDir() string {
 	return workspace.CurrentDir()
+}
+
+// WorkspaceSetCwdArgs is the request body for WorkspaceSetCwd.
+type WorkspaceSetCwdArgs struct {
+	Path string `json:"path"`
+}
+
+// WorkspaceSetCwd updates the global active cwd (default dir for the dir
+// picker and the cwd fallback for new PTYs). Called after switching a
+// workspace/space so CurrentDir follows the new home instead of staying on
+// the first-launch directory.
+func (a *App) WorkspaceSetCwd(args WorkspaceSetCwdArgs) error {
+	return workspace.SetCwd(args.Path)
 }
 
 // WorkspacePickDirectory opens a native directory picker and returns the
