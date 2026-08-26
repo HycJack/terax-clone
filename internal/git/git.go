@@ -121,7 +121,8 @@ func Status(ctx context.Context, repo string) (types.GitStatusSnapshot, error) {
 		ChangedFiles: []types.GitChangedFile{},
 	}
 	parts := strings.Split(out, "\x00")
-	for _, p := range parts {
+	for i := 0; i < len(parts); i++ {
+		p := parts[i]
 		if strings.HasPrefix(p, "## ") {
 			branch, upstream, detached := parseBranchHeader(p[3:])
 			snap.Branch = branch
@@ -134,13 +135,25 @@ func Status(ctx context.Context, repo string) (types.GitStatusSnapshot, error) {
 		}
 		x := p[0]
 		y := p[1]
-		space := p[2:]
-		path := space
+		// porcelain v1 always puts a single space between the two status
+		// columns and the pathname — even with `-z` (NUL-terminated) mode:
+		// `XY <path>\0`. Strip it so downstream commands (`git diff -- path`,
+		// `git add -- path`) receive the exact pathname; a filename that
+		// starts with a space is preserved because only the one separator
+		// space is removed.
+		rest := p[2:]
+		path := strings.TrimPrefix(rest, " ")
 		var original *string
 		if x == 'R' || y == 'R' || x == 'C' || y == 'C' {
-			if idx := strings.Index(space, " -> "); idx >= 0 {
-				old := space[:idx]
-				new := space[idx+4:]
+			if i+1 < len(parts) {
+				// -z rename/copy: `XY <new>\0<old>\0`.
+				old := parts[i+1]
+				original = &old
+				i++
+			} else if idx := strings.Index(rest, " -> "); idx >= 0 {
+				// non -z fallback: `XY <new> -> <old>`.
+				old := rest[:idx]
+				new := rest[idx+4:]
 				original = &old
 				path = new
 			}
