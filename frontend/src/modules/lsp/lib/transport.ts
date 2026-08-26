@@ -40,6 +40,8 @@ export class TauriLspTransport implements Transport {
   private onCloseCb: (() => void) | null = null;
   private onErrorCb: ((error: Error) => void) | null = null;
   private backlog: string[] = [];
+  private onMessageChannel: Channel<ArrayBuffer> | null = null;
+  private onExitChannel: Channel<LspExitInfo> | null = null;
   exitInfo: LspExitInfo | null = null;
 
   async start(config: LspSpawnConfig): Promise<void> {
@@ -57,6 +59,8 @@ export class TauriLspTransport implements Transport {
       this.closed = true;
       this.onCloseCb?.();
     };
+    this.onMessageChannel = onMessage;
+    this.onExitChannel = onExit;
     this.sessionId = await invoke<number>("lsp_spawn", {
       command: config.command,
       args: config.args,
@@ -132,6 +136,7 @@ export class TauriLspTransport implements Transport {
   close(): void {
     if (this.closed) {
       this.sessionId = null;
+      this.detachChannels();
       return;
     }
     this.closed = true;
@@ -139,5 +144,16 @@ export class TauriLspTransport implements Transport {
       void invoke("lsp_kill", { id: this.sessionId }).catch(() => {});
       this.sessionId = null;
     }
+    this.detachChannels();
+  }
+
+  // Unsubscribe the backend message/exit events. The channels are long-lived
+  // (the whole LSP session), so they are detached here on session teardown
+  // rather than in the `lsp_spawn` invoke `finally`.
+  private detachChannels(): void {
+    this.onMessageChannel?._detach();
+    this.onExitChannel?._detach();
+    this.onMessageChannel = null;
+    this.onExitChannel = null;
   }
 }

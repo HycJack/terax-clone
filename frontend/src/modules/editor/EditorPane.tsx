@@ -4,6 +4,8 @@ import {
   lspFormatDocument,
   useLspExtension,
 } from "@/modules/lsp";
+import { goBack, goForward } from "@/modules/lsp/lib/navigationHistory";
+import { pathToFileUri } from "@/modules/lsp/lib/uri";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { onKeysChanged } from "@/modules/settings/store";
 import { acceptCompletion, startCompletion } from "@codemirror/autocomplete";
@@ -84,6 +86,8 @@ export type EditorPaneHandle = {
   triggerAiComplete: () => void;
   /** Open CodeMirror's completion popup. */
   triggerCodeComplete: () => void;
+  /** Walk the LSP navigation history (Ctrl+- / Ctrl+Shift+-). */
+  navigateHistory: (direction: "back" | "forward") => boolean;
 };
 
 type Props = {
@@ -496,6 +500,14 @@ export const EditorPane = memo(
           if (!view) return;
           view.focus();
           startCompletion(view);
+        },
+        navigateHistory: (direction) => {
+          const view = cmRef.current?.view;
+          if (!view) return false;
+          const uri = pathToFileUri(pathRef.current);
+          return direction === "back"
+            ? goBack(view, uri)
+            : goForward(view, uri);
         },
       }),
       [path, applyPendingGoto],

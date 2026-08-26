@@ -24,6 +24,7 @@ export class Channel<T = unknown> {
   onmessage: ((data: T) => void) | null = null;
   readonly eventName: string;
   private cancelled = false;
+  private attachedName: string | null = null;
 
   constructor() {
     this.eventName = nextChannelId("ch");
@@ -33,6 +34,7 @@ export class Channel<T = unknown> {
   // detects a Channel argument and passes the channel instance through.
   _attach(prefix: string): string {
     const name = `${prefix}:${this.eventName}`;
+    this.attachedName = name;
     EventsOn(name, (data: unknown) => {
       if (this.cancelled) return;
       // Wails wraps EventsEmit extra args into a data array:
@@ -55,10 +57,12 @@ export class Channel<T = unknown> {
     return name;
   }
 
-  _detach(eventName: string): void {
+  _detach(eventName?: string): void {
     this.cancelled = true;
+    const name = eventName ?? this.attachedName;
+    if (!name) return;
     try {
-      EventsOff(eventName);
+      EventsOff(name);
     } catch {
       /* ignore */
     }
@@ -147,12 +151,17 @@ const SPECIAL: Record<
   },
 };
 
+/**
+ * Channels attached for long-lived subscriptions must NOT be detached here.
+ * `lsp_spawn`'s message/exit channels live for the whole LSP session — the
+ * transport tears them down in `TauriLspTransport.close()` when the session
+ * ends. Detaching here would cancel the listener before gopls ever responds,
+ * dropping the initialize result and leaving the session uninitialized
+ * ("no views" on every request). Only one-shot channel invocations are
+ * cleaned up in the invoke `finally`.
+ */
 function detachChannels(cmd: string, args: Record<string, unknown>): void {
-  if (cmd === "lsp_spawn") {
-    const a = args as Record<string, unknown>;
-    (a.onMessage as Channel | undefined)?._detach(String(a.onMessageEvent ?? ""));
-    (a.onExit as Channel | undefined)?._detach(String(a.onExitEvent ?? ""));
-  } else if (cmd === "ai_http_stream") {
+  if (cmd === "ai_http_stream") {
     const a = args as Record<string, unknown>;
     (a.onEvent as Channel | undefined)?._detach(String(a.onEventEvent ?? ""));
   } else if (cmd === "agent_enable_hooks") {

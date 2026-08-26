@@ -1,5 +1,11 @@
 import { StateEffect, StateField } from "@codemirror/state";
-import { type EditorView, type Panel, showPanel } from "@codemirror/view";
+import { type EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+
+/**
+ * VS Code-style quick-pick list for multi-result LSP responses (definitions,
+ * references). Rendered as a floating overlay near the top of the editor;
+ * ArrowUp/Down navigates, Enter/click picks, Escape closes.
+ */
 
 export type LocationItem = {
   uri: string;
@@ -25,10 +31,6 @@ const locationsField = StateField.define<PanelSpec | null>({
     }
     return value;
   },
-  provide: (f) =>
-    showPanel.from(f, (spec) =>
-      spec ? (view) => createPanel(view, spec) : null,
-    ),
 });
 
 export function openLocationsPanel(view: EditorView, spec: PanelSpec): void {
@@ -40,66 +42,113 @@ function closePanel(view: EditorView): void {
   view.focus();
 }
 
-function createPanel(view: EditorView, spec: PanelSpec): Panel {
-  const dom = document.createElement("div");
-  dom.className = "cm-lsp-locations";
+class LocationPicker {
+  private spec: PanelSpec | null = null;
+  private active = 0;
+  private rows: HTMLElement[] = [];
+  private readonly dom: HTMLElement;
+  private readonly header: HTMLElement;
+  private readonly list: HTMLElement;
 
-  const header = document.createElement("div");
-  header.className = "cm-lsp-locations-header";
-  header.textContent = `${spec.title} (${spec.items.length})`;
-  dom.appendChild(header);
+  constructor(view: EditorView) {
+    this.dom = document.createElement("div");
+    this.dom.className = "cm-lsp-locations";
+    this.dom.style.display = "none";
 
-  const list = document.createElement("ul");
-  list.tabIndex = 0;
-  dom.appendChild(list);
+    this.header = document.createElement("div");
+    this.header.className = "cm-lsp-locations-header";
+    this.list = document.createElement("ul");
+    this.list.className = "cm-lsp-locations-list";
+    this.list.tabIndex = 0;
 
-  let active = 0;
-  const rows: HTMLElement[] = spec.items.map((item, i) => {
-    const li = document.createElement("li");
-    li.textContent = item.label;
-    li.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      pick(i);
+    this.dom.appendChild(this.header);
+    this.dom.appendChild(this.list);
+    view.dom.appendChild(this.dom);
+  }
+
+  private render(view: EditorView, spec: PanelSpec): void {
+    this.spec = spec;
+    this.active = 0;
+    this.dom.style.display = "block";
+    this.header.textContent = `${spec.title} (${spec.items.length})`;
+
+    this.list.replaceChildren();
+    this.rows = spec.items.map((item, i) => {
+      const li = document.createElement("li");
+      li.textContent = item.label;
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        this.pick(view, i);
+      });
+      this.list.appendChild(li);
+      return li;
     });
-    list.appendChild(li);
-    return li;
-  });
+    this.highlight();
+    this.list.focus();
+  }
 
-  const renderActive = () => {
-    rows.forEach((row, i) => {
-      row.classList.toggle("cm-lsp-locations-active", i === active);
+  private highlight(): void {
+    this.rows.forEach((row, i) => {
+      row.classList.toggle("cm-lsp-locations-active", i === this.active);
     });
-    rows[active]?.scrollIntoView({ block: "nearest" });
-  };
+    this.rows[this.active]?.scrollIntoView({ block: "nearest" });
+  }
 
-  const pick = (i: number) => {
+  private pick(view: EditorView, i: number): void {
+    const spec = this.spec;
+    if (!spec) return;
     const item = spec.items[i];
     closePanel(view);
     spec.onPick(item);
-  };
+  }
 
-  list.addEventListener("keydown", (e) => {
+  private onKey(view: EditorView, e: KeyboardEvent): boolean {
+    const spec = this.spec;
+    if (!spec) return false;
     if (e.key === "ArrowDown") {
-      active = Math.min(active + 1, spec.items.length - 1);
-      renderActive();
+      this.active = Math.min(this.active + 1, spec.items.length - 1);
+      this.highlight();
     } else if (e.key === "ArrowUp") {
-      active = Math.max(active - 1, 0);
-      renderActive();
+      this.active = Math.max(this.active - 1, 0);
+      this.highlight();
     } else if (e.key === "Enter") {
-      pick(active);
+      this.pick(view, this.active);
     } else if (e.key === "Escape") {
       closePanel(view);
     } else {
-      return;
+      return false;
     }
     e.preventDefault();
-  });
+    return true;
+  }
 
-  renderActive();
-  return {
-    dom,
-    mount: () => list.focus(),
-  };
+  onKeydown(view: EditorView, e: KeyboardEvent): boolean {
+    return this.onKey(view, e);
+  }
+
+  update(update: ViewUpdate): void {
+    const next = update.state.field(locationsField);
+    if (next === this.spec) return;
+    if (next) {
+      this.render(update.view, next);
+    } else {
+      this.spec = null;
+      this.dom.style.display = "none";
+    }
+  }
+
+  destroy(): void {
+    this.dom.remove();
+  }
 }
 
-export const locationsPanel = locationsField;
+export const locationsPanel = [
+  locationsField,
+  ViewPlugin.fromClass(LocationPicker, {
+    eventHandlers: {
+      keydown(e, view) {
+        this.onKeydown(view, e);
+      },
+    },
+  }),
+];

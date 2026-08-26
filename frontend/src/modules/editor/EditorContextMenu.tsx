@@ -55,6 +55,14 @@ export function EditorContextMenu({ children, cm }: Props) {
         <ContextMenuItem
           className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
           disabled={!actionsEnabled}
+          onSelect={() => cm.runKeyBinding("Alt-F12")}
+        >
+          Peek Definition
+          <ContextMenuShortcut>⌥F12</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
+          disabled={!actionsEnabled}
           onSelect={() => cm.runKeyBinding("Shift-F12")}
         >
           Find References

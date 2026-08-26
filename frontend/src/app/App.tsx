@@ -44,7 +44,11 @@ import {
   type SearchTarget,
 } from "@/modules/header";
 import { setLspNavigator } from "@/modules/lsp";
+import { goBack, goForward } from "@/modules/lsp/lib/navigationHistory";
+import { useNavHistory } from "@/modules/lsp/lib/useNavHistory";
+import { pathToFileUri } from "@/modules/lsp/lib/uri";
 import type { PreviewPaneHandle } from "@/modules/preview";
+import { isSpreadsheetPath } from "@/modules/viewer";
 import {
   openSettingsWindow,
   registerSettingsDialog,
@@ -140,6 +144,7 @@ export default function App() {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    newViewerTab,
     setMarkdownView,
     setOverrideLanguage,
     openAiDiffTab,
@@ -164,6 +169,8 @@ export default function App() {
   // (e.g. cdInNewTab) read the latest pane state instead of a stale closure.
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+
+  const { canGoBack, canGoForward } = useNavHistory();
 
   const activeTerminalTab = useMemo(() => {
     const t = tabs.find((x) => x.id === activeId);
@@ -203,6 +210,23 @@ export default function App() {
 
   const workspaceEnv = useWorkspaceEnvStore((s) => s.env);
   const setWorkspaceEnv = useWorkspaceEnvStore((s) => s.setEnv);
+
+  const handleNavHistory = useCallback(
+    (direction: "back" | "forward") => {
+      const tab = tabsRef.current.find((t) => t.id === activeId);
+      if (tab?.kind === "editor") {
+        const h = editorRefs.current.get(tab.id);
+        if (h?.navigateHistory(direction)) return;
+      }
+      // No active editor view (terminal/preview tab): still walk cross-file
+      // positions through the shared navigator.
+      const docUri =
+        tab?.kind === "editor" ? pathToFileUri(tab.path) : "";
+      if (direction === "back") goBack(null, docUri);
+      else goForward(null, docUri);
+    },
+    [activeId],
+  );
   const {
     home,
     launchCwd,
@@ -600,12 +624,14 @@ export default function App() {
   const handleOpenFile = useCallback(
     (path: string, pin?: boolean) => {
       // Markdown opens in its rendered view by default; a per-tab toggle flips
-      // it to the raw editor. Other files default to preview (pin=false);
-      // explicit actions like context-menu "Open" pass pin=true to persist.
+      // it to the raw editor. Spreadsheets (CSV/TSV/Excel) open in a table
+      // viewer. Other files default to preview (pin=false); explicit actions
+      // like context-menu "Open" pass pin=true to persist.
       if (isMarkdownPath(path)) newMarkdownTab(path);
+      else if (isSpreadsheetPath(path)) newViewerTab(path);
       else openFileTab(path, pin ?? false);
     },
-    [openFileTab, newMarkdownTab],
+    [openFileTab, newMarkdownTab, newViewerTab],
   );
 
   // "Open With" files arrive via the event (warm start) and get_launch_files
@@ -1266,6 +1292,9 @@ export default function App() {
               searchTarget={searchTarget}
               searchRef={searchInlineRef}
               onOverrideLanguage={setOverrideLanguage}
+              canGoBack={canGoBack}
+              canGoForward={canGoForward}
+              onNavigateHistory={handleNavHistory}
             />
           )}
 
@@ -1355,6 +1384,7 @@ export default function App() {
                       onOpenCommitFile={openCommitFileDiffTab}
                       onGitHistorySearchHandle={setGitHistoryHandle}
                       onSetMarkdownView={setMarkdownView}
+                      onViewerOpenInEditor={(path) => openFileTab(path, true)}
                     />
                   </div>
 

@@ -1,11 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { WindowControls } from "@/components/WindowControls";
 import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
+import { getCurrentWindow } from "@/lib/wails/window";
 import { NotificationBell } from "@/modules/agents";
 import type { AgentLaunchRequest } from "@/modules/agents/lib/launcher";
 import type { Tab } from "@/modules/tabs";
 import { TabBar } from "@/modules/tabs";
 import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
   CommandIcon,
   Settings01Icon,
   SidebarLeftIcon,
@@ -51,6 +54,10 @@ type Props = {
   spaceSwitcher: ReactNode;
   searchTarget: SearchTarget;
   searchRef: RefObject<SearchInlineHandle | null>;
+  /** LSP navigation history (back/forward buttons). */
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onNavigateHistory: (direction: "back" | "forward") => void;
 };
 
 const COMPACT_WIDTH = 720;
@@ -79,6 +86,9 @@ export function Header({
   spaceSwitcher,
   searchTarget,
   searchRef,
+  canGoBack,
+  canGoForward,
+  onNavigateHistory,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
@@ -106,15 +116,72 @@ export function Header({
     </Button>
   );
 
+  // Same interactive-element list as the `--wails-draggable: no-drag` CSS
+  // exclusions: double-clicks on controls must not zoom the window.
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const el = e.target as Element;
+    if (
+      el.closest(
+        [
+          "button",
+          "a",
+          "input",
+          "textarea",
+          "select",
+          '[role="button"]',
+          '[role="slider"]',
+          '[role="combobox"]',
+          "[data-no-drag]",
+          '[data-role="tab"]',
+          "[data-slot]",
+          "[data-radix-collection-item]",
+        ].join(","),
+      )
+    ) {
+      return;
+    }
+    void getCurrentWindow().toggleMaximize();
+  };
+
+  const navButton = (
+    direction: "back" | "forward",
+    disabled: boolean,
+  ) => {
+    const isBack = direction === "back";
+    return (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        disabled={disabled}
+        onClick={() => onNavigateHistory(direction)}
+        title={
+          isBack ? "Back (Ctrl+-)" : "Forward (Ctrl+Shift+-)"
+        }
+        className="shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+      >
+        <HugeiconsIcon
+          icon={isBack ? ArrowLeft01Icon : ArrowRight01Icon}
+          size={15}
+          strokeWidth={1.75}
+        />
+      </Button>
+    );
+  };
+
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: window-chrome drag region; double-click zooms the window
     <div
       ref={rootRef}
       data-tauri-drag-region
+      onDoubleClick={handleDoubleClick}
       className={`flex h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-card select-none ${
         IS_MAC ? "pr-2 pl-20" : "pr-0 pl-2"
       }`}
     >
       <div className="flex shrink-0 items-center gap-0.5">
+        {navButton("back", !canGoBack)}
+        {navButton("forward", !canGoForward)}
+
         <Button
           onClick={onToggleSidebar}
           title="Toggle sidebar"

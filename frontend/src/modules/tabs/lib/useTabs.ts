@@ -119,11 +119,19 @@ export type GitCommitFileDiffTab = TabBase & {
   originalPath: string | null;
 };
 
+export type ViewerTab = TabBase & {
+  id: number;
+  kind: "viewer";
+  title: string;
+  path: string;
+};
+
 export type Tab =
   | TerminalTab
   | EditorTab
   | PreviewTab
   | MarkdownTab
+  | ViewerTab
   | AiDiffTab
   | GitDiffTab
   | GitHistoryTab
@@ -799,6 +807,33 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     return targetId;
   }, []);
 
+  const newViewerTab = useCallback((path: string) => {
+    let targetId: number | null = null;
+    setTabs((curr) => {
+      const existing = curr.find(
+        (t) => t.kind === "viewer" && t.path === path,
+      );
+      if (existing) {
+        targetId = existing.id;
+        return curr;
+      }
+      const id = nextIdRef.current++;
+      targetId = id;
+      return [
+        ...curr,
+        {
+          id,
+          kind: "viewer",
+          spaceId: activeSpaceIdRef.current,
+          title: basename(path),
+          path,
+        },
+      ];
+    });
+    if (targetId !== null) setActiveId(targetId);
+    return targetId;
+  }, []);
+
   const setOverrideLanguage = useCallback((id: number, lang: string | null) => {
     setTabs((curr) =>
       curr.map((t) => {
@@ -1247,6 +1282,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    newViewerTab,
     setMarkdownView,
     openAiDiffTab,
     openGitDiffTab,
