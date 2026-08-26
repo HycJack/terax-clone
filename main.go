@@ -2,10 +2,12 @@ package main
 
 import (
 	"embed"
+	"runtime"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	mac "github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
@@ -20,10 +22,19 @@ func main() {
 		Title:  "terax",
 		Width:  1024,
 		Height: 768,
-		// Frameless drops the native Win32 caption / title bar so the React
-		// chrome (WindowControls.tsx) can drive its own drag region and
-		// traffic-light-style buttons. Mirrors `tauri.conf.json:window.titleBarStyle=Overlay`.
-		Frameless:        true,
+		// Windows: frameless drops the native Win32 caption / title bar so the
+		// React chrome (WindowControls.tsx) can drive its own drag region and
+		// traffic-light-style buttons.
+		//
+		// macOS: keep the native traffic lights ("overlay title bar") — a
+		// frameless window hides them entirely and the custom controls are
+		// intentionally disabled on Mac (see lib/platform.ts). TitleBarHidden
+		// makes the title bar transparent/full-size while keeping close /
+		// minimize / zoom buttons in the top-left.
+		Frameless: runtime.GOOS == "windows",
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarHidden(),
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

@@ -329,7 +329,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   editorWordWrap: false,
   showHidden: false,
   explorerGitDecorations: true,
-  terminalWebglEnabled: true,
+  // WebGL renderer defaults to OFF: its GPU glyph atlas corrupts on some macOS
+  // setups (especially with Nerd Fonts), making terminal text unreadable /
+  // desync from the real buffer. The DOM renderer is always correct.
+  terminalWebglEnabled: false,
   terminalCursorBlink: false,
   terminalCursorStyle: "bar",
   terminalFontFamily: "",

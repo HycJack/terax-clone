@@ -22,6 +22,7 @@ import { GeneralSection } from "./sections/GeneralSection";
 import { ModelsSection } from "./sections/ModelsSection";
 import { ShortcutsSection } from "./sections/ShortcutsSection";
 import { ThemesSection } from "./sections/ThemesSection";
+import { SectionErrorBoundary } from "./components/SectionErrorBoundary";
 
 const TABS: {
   id: SettingsTab;
@@ -149,7 +150,9 @@ export function SettingsApp() {
 
       <main className="min-h-0 flex-1 overflow-y-auto px-8 pt-6 pb-7 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="mx-auto w-full max-w-160">
-          {ActiveSection && <ActiveSection />}
+          <SectionErrorBoundary>
+            {ActiveSection && <ActiveSection />}
+          </SectionErrorBoundary>
         </div>
       </main>
     </div>

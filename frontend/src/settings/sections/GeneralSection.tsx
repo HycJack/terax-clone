@@ -123,10 +123,10 @@ export function GeneralSection() {
 
   useEffect(() => {
     void invoke<ShellInfo[]>("pty_list_shells")
-      .then(setShells)
+      .then((list) => setShells(list ?? []))
       .catch(() => {});
     void invoke<{ name: string }[]>("wsl_list_distros")
-      .then(setWslDistros)
+      .then((list) => setWslDistros(list ?? []))
       .catch(() => {});
   }, []);
 

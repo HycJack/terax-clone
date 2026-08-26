@@ -31,8 +31,6 @@ import (
 
 	gopty "github.com/aymanbagabas/go-pty"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
-
-	"terax/internal/sysproc"
 )
 
 // Session is a single PTY instance.
@@ -462,15 +460,7 @@ func filepathBase(p string) string {
 }
 
 func procAttr() *syscall.SysProcAttr {
-	if runtime.GOOS == "windows" {
-		// CREATE_NEW_PROCESS_GROUP so Ctrl+C / kill signal affects only the
-		// child, not the host. CREATE_NO_WINDOW so spawning cmd.exe /
-		// powershell / pwsh doesn't flash a console window.
-		return &syscall.SysProcAttr{
-			CreationFlags: 0x00000200 | sysproc.CREATE_NO_WINDOW,
-		}
-	}
-	return unixSysProcAttr()
+	return platformProcAttr()
 }
 
 func killProcessTree(pid int) error {
