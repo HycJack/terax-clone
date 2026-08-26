@@ -540,6 +540,7 @@ export const EditorPane = memo(
             text: view.state.sliceDoc(word.from, word.to),
           };
         },
+        isLspActive: () => lspActiveRef.current,
       }),
       [],
     );

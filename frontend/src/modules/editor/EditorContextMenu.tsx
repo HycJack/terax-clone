@@ -7,12 +7,15 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useCallback, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
 export type EditorCmHandle = {
   path: string;
   runKeyBinding: (key: string) => boolean;
   getSelection: () => string | null;
   cursorWord: () => { from: number; to: number; text: string } | null;
+  /** True when an LSP server is active for this document right now. */
+  isLspActive: () => boolean;
 };
 
 type Props = {
@@ -34,6 +37,25 @@ export function EditorContextMenu({ children, cm }: Props) {
     setNonce((n) => n + 1);
   }, [cm]);
 
+  // LSP actions (defs/refs/rename) need a live server. The keybindings only
+  // exist while the LSP compartment is mounted, so dispatching them on a
+  // file without a server would silently do nothing. Rather than gray the
+  // items (which read as a broken UI), keep them enabled and surface clear
+  // feedback when clicked without a server.
+  const runLspAction = useCallback(
+    (key: string, label: string) => {
+      if (!cm.isLspActive()) {
+        toast(label, {
+          description:
+            "No language server is active for this file. Install/enable one in Settings → Language Servers.",
+        });
+        return;
+      }
+      cm.runKeyBinding(key);
+    },
+    [cm],
+  );
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild onContextMenu={handleContextMenu}>
@@ -47,7 +69,7 @@ export function EditorContextMenu({ children, cm }: Props) {
         <ContextMenuItem
           className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
           disabled={!actionsEnabled}
-          onSelect={() => cm.runKeyBinding("F12")}
+          onSelect={() => runLspAction("F12", "Go to Definition")}
         >
           Go to Definition
           <ContextMenuShortcut>F12</ContextMenuShortcut>
@@ -55,7 +77,7 @@ export function EditorContextMenu({ children, cm }: Props) {
         <ContextMenuItem
           className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
           disabled={!actionsEnabled}
-          onSelect={() => cm.runKeyBinding("Shift-F12")}
+          onSelect={() => runLspAction("Shift-F12", "Find References")}
         >
           Find References
           <ContextMenuShortcut>⇧F12</ContextMenuShortcut>
@@ -63,7 +85,7 @@ export function EditorContextMenu({ children, cm }: Props) {
         <ContextMenuItem
           className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
           disabled={!actionsEnabled}
-          onSelect={() => cm.runKeyBinding("F2")}
+          onSelect={() => runLspAction("F2", "Rename Symbol")}
         >
           Rename Symbol
           <ContextMenuShortcut>F2</ContextMenuShortcut>

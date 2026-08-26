@@ -242,7 +242,7 @@ function BranchDropdown({
         <button
           type="button"
           disabled={checkingOut}
-          className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md bg-foreground/5 px-2 py-1 text-[11.5px] font-medium leading-none text-foreground transition-colors hover:bg-foreground/10 disabled:cursor-default disabled:opacity-70"
+          className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md bg-accent/55 px-2 py-1 text-[11.5px] font-medium leading-none text-foreground transition-colors hover:bg-accent/80 disabled:cursor-default disabled:opacity-70"
         >
           <HugeiconsIcon
             icon={FolderGitTwoIcon}
@@ -721,7 +721,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
           <button
             type="button"
             onClick={() => onOpenGitGraph()}
-            className="group flex shrink-0 cursor-pointer items-center gap-2 border-b border-border/40 px-3 py-2 text-left text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+            className="group flex shrink-0 cursor-pointer items-center gap-2 border-b border-border/40 px-3 py-2 text-left text-muted-foreground transition-colors hover:bg-accent/20 hover:text-foreground"
           >
             <HugeiconsIcon
               icon={GitBranchIcon}
@@ -803,7 +803,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
                         onClick={() => void scm.generateCommitMessage()}
                         className={cn(
                           "inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground/65 transition-colors",
-                          "hover:bg-foreground/[0.06] hover:text-foreground",
+                          "hover:bg-accent/25 hover:text-foreground",
                           "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground/65",
                         )}
                       >
@@ -1068,7 +1068,7 @@ const RowRenderer = memo(function RowRenderer(props: RowRendererProps) {
 
 function DivergedBanner() {
   return (
-    <div className="mx-2 mt-1 flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-foreground/[0.04] px-2 text-[10.5px] leading-none text-muted-foreground">
+    <div className="mx-2 mt-1 flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 text-[10.5px] leading-none text-muted-foreground">
       <HugeiconsIcon
         icon={Alert02Icon}
         size={11}
