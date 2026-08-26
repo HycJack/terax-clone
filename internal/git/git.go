@@ -11,7 +11,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -225,9 +227,20 @@ func Diff(ctx context.Context, repo, path string, staged bool) (types.GitDiffRes
 }
 
 // DiffContent returns the staged/unstaged diff as a JSON-shaped envelope.
-// The Rust backend uses `git diff --no-color` and parses hunks; we keep the
-// same shape so the frontend's diff viewer continues to work.
+// DiffContent returns the complete before/after content for a file so the
+// frontend can render a line-level merge view. `original` is the HEAD (or
+// index) snapshot and `modified` is the working-tree (or index) snapshot;
+// a unified git diff is kept only as FallbackPatch for the binary/large-file
+// fallback view. Feeding full snapshots (rather than parsed diff fragments)
+// is what lets @codemirror/merge produce a correct, non-blank diff.
 func DiffContent(ctx context.Context, repo, path string, staged bool, originalPath string) (types.GitDiffContentResult, error) {
+	defer func() {
+		f, _ := os.OpenFile(filepath.Join(os.TempDir(), "terax-diff-debug.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if f != nil {
+			fmt.Fprintf(f, "DiffContent repo=%q path=%q staged=%v originalPath=%q\n", repo, path, staged, originalPath)
+			f.Close()
+		}
+	}()
 	args := []string{"diff", "--no-color", "--no-ext-diff"}
 	if staged {
 		args = append(args, "--staged")
@@ -237,14 +250,107 @@ func DiffContent(ctx context.Context, repo, path string, staged bool, originalPa
 	if err != nil {
 		return types.GitDiffContentResult{}, err
 	}
-	orig, mod := parseUnifiedDiff(text)
+
+	// Old path resolves renames in the working diff back to the base name.
+	oldPath := path
+	if originalPath != "" && originalPath != path {
+		oldPath = originalPath
+	}
+
+	var orig, mod string
+	var origExists, modExists bool
+	if staged {
+		// Index vs HEAD: `:path` is the staged blob, HEAD:oldPath the base.
+		orig, origExists = blobContent(ctx, repo, "HEAD", oldPath)
+		mod, modExists = blobContent(ctx, repo, ":", path)
+		if !modExists {
+			// A staged deletion may only exist in the worktree for, e.g.,
+			// a partial re-add at the same path; fall back to the on-disk
+			// file so the viewer still has something to show.
+			mod, modExists = worktreeContent(repo, path)
+		}
+	} else {
+		// Working tree vs HEAD/index: modified/new/untracked files come from
+		// disk; deleted-in-worktree files fall back to the index blob.
+		mod, modExists = worktreeContent(repo, path)
+		if !modExists {
+			mod, modExists = blobContent(ctx, repo, ":", path)
+		}
+		orig, origExists = blobContent(ctx, repo, "HEAD", oldPath)
+		if !origExists {
+			// Untracked/new file: nothing to diff against.
+			origExists = false
+		}
+	}
+	_ = origExists // orig is "" whenever the base snapshot is missing.
+
+	isBinary := hasNUL(orig) || hasNUL(mod)
+	if isBinary {
+		// Keep the unified patch for the fallback view; the merge view can't
+		// render binary content.
+		orig = ""
+		mod = ""
+	}
+	if true { // TEMP DEBUG logging (unconditional until blank-diff is resolved)
+		f, _ := os.OpenFile(filepath.Join(os.TempDir(), "terax-diff-debug.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if f != nil {
+			fmt.Fprintf(f, "  -> orig=%d mod=%d isBin=%v patch=%d\n", len(orig), len(mod), isBinary, len(text))
+			f.Close()
+		}
+	}
+
 	return types.GitDiffContentResult{
 		OriginalContent: orig,
 		ModifiedContent: mod,
-		IsBinary:        false,
+		IsBinary:        isBinary,
 		FallbackPatch:   text,
 		Truncated:       false,
 	}, nil
+}
+
+// blobContent returns the raw content at `<rev>:<path>` plus whether the
+// object (or the path inside that revision) exists. rev may be "HEAD",
+// "<sha>", or ":" for the index; pass an empty path to read the whole rev.
+func blobContent(ctx context.Context, repo, rev, path string) (string, bool) {
+	if rev == "" {
+		return "", false
+	}
+	spec := rev
+	if path != "" {
+		spec = rev + ":" + path
+	}
+	if _, err := run(ctx, repo, "cat-file", "-e", spec); err != nil {
+		return "", false
+	}
+	out, err := run(ctx, repo, "cat-file", "blob", spec)
+	if err != nil {
+		return "", false
+	}
+	return out, true
+}
+
+// worktreeContent returns the working-tree bytes of a file (not following the
+// index/HEAD) when it exists on disk.
+func worktreeContent(repo, path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	full := filepath.Join(repo, filepath.FromSlash(filepath.Clean(path)))
+	data, err := os.ReadFile(full)
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}
+
+// hasNUL reports whether the first 8 KB of a string contain a NUL byte, a
+// heuristic matching git's binary detection.
+func hasNUL(s string) bool {
+	n := len(s)
+	if n > 8192 {
+		n = 8192
+	}
+	return strings.IndexByte(s[:n], 0) >= 0
 }
 
 // Stage adds paths to the index.
@@ -477,27 +583,37 @@ func CommitFiles(ctx context.Context, repo, sha string) ([]types.GitCommitFileCh
 
 // CommitFileDiff returns the diff for a single file in a commit.
 func CommitFileDiff(ctx context.Context, repo, sha, path, originalPath string) (types.GitDiffContentResult, error) {
+	// Unified bit kept for the binary/large-file fallback view. `git show`
+	// with two paths shows a combined rename patch.
+	var text string
+	var err error
 	if originalPath != "" && originalPath != path {
-		text, err := run(ctx, repo, "show", "--no-color", "--no-ext-diff", sha, "--", originalPath, path)
-		if err != nil {
-			return types.GitDiffContentResult{}, err
-		}
-		orig, mod := parseUnifiedDiff(text)
-		return types.GitDiffContentResult{
-			OriginalContent: orig,
-			ModifiedContent: mod,
-			FallbackPatch:   text,
-			Truncated:       false,
-		}, nil
+		text, err = run(ctx, repo, "show", "--no-color", "--no-ext-diff", sha, "--", originalPath, path)
+	} else {
+		text, err = run(ctx, repo, "show", "--no-color", "--no-ext-diff", sha, "--", path)
 	}
-	text, err := run(ctx, repo, "show", "--no-color", "--no-ext-diff", sha, "--", path)
 	if err != nil {
 		return types.GitDiffContentResult{}, err
 	}
-	orig, mod := parseUnifiedDiff(text)
+
+	// Full before/after snapshots so the merge view renders a real line
+	// diff. For a rename the parent blob lives at originalPath.
+	oldPath := path
+	if originalPath != "" && originalPath != path {
+		oldPath = originalPath
+	}
+	orig, _ := blobContent(ctx, repo, sha+"^", oldPath)
+	mod, _ := blobContent(ctx, repo, sha, path)
+
+	isBinary := hasNUL(orig) || hasNUL(mod)
+	if isBinary {
+		orig = ""
+		mod = ""
+	}
 	return types.GitDiffContentResult{
 		OriginalContent: orig,
 		ModifiedContent: mod,
+		IsBinary:        isBinary,
 		FallbackPatch:   text,
 		Truncated:       false,
 	}, nil
@@ -564,46 +680,4 @@ func CheckoutBranch(ctx context.Context, repo, name string) error {
 // fields so the struct literal can stay readable.
 func ptr(s string) *string {
 	return &s
-}
-
-// parseUnifiedDiff splits a unified diff into original and modified content.
-// Lines starting with '-' go to original, '+' to modified, and context lines
-// (starting with ' ' or no prefix) go to both. The diff header and hunk
-// headers are skipped.
-func parseUnifiedDiff(text string) (original, modified string) {
-	var origLines, modLines []string
-	for _, line := range strings.Split(text, "\n") {
-		// Skip diff headers and hunk headers.
-		if strings.HasPrefix(line, "diff --git ") ||
-			strings.HasPrefix(line, "index ") ||
-			strings.HasPrefix(line, "--- ") ||
-			strings.HasPrefix(line, "+++ ") ||
-			strings.HasPrefix(line, "@@ ") {
-			continue
-		}
-		// "\ No newline at end of file" — skip.
-		if line == `\ No newline at end of file` {
-			continue
-		}
-		if len(line) == 0 {
-			continue
-		}
-		switch line[0] {
-		case '-':
-			// Removed line — goes to original only.
-			origLines = append(origLines, line[1:])
-		case '+':
-			// Added line — goes to modified only.
-			modLines = append(modLines, line[1:])
-		default:
-			// Context line (starts with ' ' or is empty after header skips).
-			content := line
-			if line[0] == ' ' {
-				content = line[1:]
-			}
-			origLines = append(origLines, content)
-			modLines = append(modLines, content)
-		}
-	}
-	return strings.Join(origLines, "\n"), strings.Join(modLines, "\n")
 }

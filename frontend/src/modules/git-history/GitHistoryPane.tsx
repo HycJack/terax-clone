@@ -745,7 +745,7 @@ const CommitRow = memo(function CommitRow({
       </span>
       <span aria-hidden />
       <span
-        className="ml-2 inline-flex h-[18px] max-w-full min-w-0 items-center gap-1.5 justify-self-start self-center overflow-hidden rounded-md bg-foreground/6 pl-1 pr-1.5 text-[10.5px] font-medium text-foreground/85"
+        className="ml-2 inline-flex h-[18px] max-w-full min-w-0 items-center gap-1.5 justify-self-start self-center overflow-hidden rounded-md bg-muted/40 pl-1 pr-1.5 text-[10.5px] font-medium text-foreground/85"
         title={commit.authorEmail || commit.author}
       >
         <span
