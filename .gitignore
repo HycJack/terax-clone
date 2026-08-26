@@ -48,6 +48,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Windows reserved device name (accidental `> nul` redirect artifact)
+nul
+
 # ===== Secrets / local config =====
 # Never commit API keys, tokens, or local-only config
 .env
