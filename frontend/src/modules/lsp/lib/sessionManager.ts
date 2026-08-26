@@ -6,11 +6,10 @@ import { invoke } from "@/lib/wails/core";
 import { toast } from "sonner";
 import type { TeraxLspClient } from "./client";
 import { detectBinary } from "./detect";
-import { getLspNavigator } from "./navigator";
-import { type LspPreset, serverForLanguage } from "./presets";
 import { useLspRuntimeStore } from "./runtimeStore";
+import { type LspPreset, serverForLanguage } from "./presets";
 import type { TauriLspTransport } from "./transport";
-import { fileUriToPath, pathToFileUri } from "./uri";
+import { pathToFileUri } from "./uri";
 
 const IDLE_SHUTDOWN_MS = 3 * 60 * 1000;
 const CRASH_WINDOW_MS = 5 * 60 * 1000;
@@ -124,10 +123,6 @@ export async function acquireDocExtension(
       client: managed.client,
       documentUri: uri,
       rootPath: managed.root.replace(/\\/g, "/"),
-      onExternal: (extUri, line) => {
-        const target = fileUriToPath(extUri);
-        if (target) getLspNavigator()?.openFile(target, line);
-      },
     }),
     mod.languageServerWithTransport({
       client: managed.client,

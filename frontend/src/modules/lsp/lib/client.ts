@@ -23,6 +23,8 @@ import {
   locationsPanel,
   openLocationsPanel,
 } from "./locationsPanel";
+import { jumpHistory, type JumpPos } from "./jumpHistory";
+import { getLspNavigator } from "./navigator";
 import { fileUriToPath } from "./uri";
 
 export {
@@ -242,17 +244,17 @@ export function lspInteractions(opts: {
   client: TeraxLspClient;
   documentUri: string;
   rootPath: string;
-  onExternal: (uri: string, line: number) => void;
 }): Extension {
-  const navigate = (view: EditorView, loc: LspLocation): void => {
-    if (loc.uri === opts.documentUri) {
-      const targetLine = Math.min(
-        loc.range.start.line + 1,
-        view.state.doc.lines,
-      );
+  // Move the cursor to a 0-based {line, character}. Same-file targets use
+  // exact selection; cross-file targets delegate to the global navigator
+  // (the same path definition jumps use) so history can restore across
+  // files even though each extension only knows its own documentUri.
+  const goTo = (view: EditorView, pos: LspPos, uri: string): void => {
+    if (uri === opts.documentUri) {
+      const targetLine = Math.min(pos.line + 1, view.state.doc.lines);
       const lineObj = view.state.doc.line(targetLine);
       const target = Math.min(
-        lineObj.from + loc.range.start.character,
+        lineObj.from + pos.character,
         lineObj.to,
       );
       view.dispatch({
@@ -260,9 +262,27 @@ export function lspInteractions(opts: {
         effects: EditorView.scrollIntoView(target, { y: "center" }),
       });
       view.focus();
-    } else {
-      opts.onExternal(loc.uri, loc.range.start.line + 1);
+      return;
     }
+    const path = fileUriToPath(uri);
+    if (path) getLspNavigator()?.openFile(path, pos.line + 1);
+  };
+
+  // current position (0-based) so we can record it as a history origin.
+  const currentPos = (view: EditorView): JumpPos => {
+    const { head } = view.state.selection.main;
+    const lineObj = view.state.doc.lineAt(head);
+    return {
+      uri: opts.documentUri,
+      line: lineObj.number - 1,
+      character: head - lineObj.from,
+    };
+  };
+
+  const navigate = (view: EditorView, loc: LspLocation): void => {
+    // Record where the cursor was so Ctrl+Alt+←/→ can retrace the jump.
+    jumpHistory.push(currentPos(view));
+    goTo(view, loc.range.start, loc.uri);
   };
 
   const label = (loc: LspLocation): string => {
@@ -367,6 +387,26 @@ export function lspInteractions(opts: {
         key: "F2",
         preventDefault: true,
         run: renameSymbol,
+      },
+      {
+        key: "Mod-Alt-ArrowLeft",
+        mac: "Mod-Alt-ArrowLeft",
+        preventDefault: true,
+        run: (view) => {
+          const target = jumpHistory.back();
+          if (target) goTo(view, target, target.uri);
+          return true;
+        },
+      },
+      {
+        key: "Mod-Alt-ArrowRight",
+        mac: "Mod-Alt-ArrowRight",
+        preventDefault: true,
+        run: (view) => {
+          const target = jumpHistory.forward();
+          if (target) goTo(view, target, target.uri);
+          return true;
+        },
       },
       {
         key: "Shift-Alt-f",
