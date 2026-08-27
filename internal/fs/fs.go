@@ -57,24 +57,38 @@ func (m *WatcherManager) BindContext(ctx context.Context) {
 	m.ctx = ctx
 }
 
-// Add starts watching the given directories.
+// Add starts watching the given directories and their subdirectories, so
+// changes in nested folders (which the frontend doesn't re-add on its own)
+// are covered too. Bounded to avoid exploding on gigantic trees.
 func (m *WatcherManager) Add(paths []string) {
 	if m.watcher == nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	const maxDirs = 4000
 	for _, p := range paths {
 		abs, err := filepath.Abs(p)
 		if err != nil {
 			continue
 		}
-		if m.watched[abs] {
-			continue
-		}
-		if err := m.watcher.Add(abs); err == nil {
-			m.watched[abs] = true
-		}
+		count := 0
+		_ = filepath.WalkDir(abs, func(dir string, d os.DirEntry, err error) error {
+			if err != nil || !d.IsDir() {
+				return nil
+			}
+			if count >= maxDirs {
+				return filepath.SkipDir
+			}
+			if m.watched[dir] {
+				return nil
+			}
+			if err := m.watcher.Add(dir); err == nil {
+				m.watched[dir] = true
+				count++
+			}
+			return nil
+		})
 	}
 }
 
@@ -125,6 +139,19 @@ func (m *WatcherManager) pump() {
 		case ev, ok := <-m.watcher.Events:
 			if !ok {
 				return
+			}
+			if ev.Op&fsnotify.Create != 0 {
+				// A new directory appeared under a watched path — watch it too
+				// so files created inside it are covered going forward.
+				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
+					m.mu.Lock()
+					if !m.watched[ev.Name] {
+						if err := m.watcher.Add(ev.Name); err == nil {
+							m.watched[ev.Name] = true
+						}
+					}
+					m.mu.Unlock()
+				}
 			}
 			pending[ev.Name] = true
 			t.Reset(coalesce)
