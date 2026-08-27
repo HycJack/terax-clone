@@ -1,9 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getBindingTokens, type KeyBinding, matchBinding } from "./shortcuts";
 
-// These tests run in the vitest node environment, where the Tauri OS plugin is
-// unavailable so `IS_MAC` resolves to false. That makes the non-mac token
-// branch deterministic across host platforms.
+// Pin the platform to non-mac so the token branch is deterministic on every
+// host (macOS CI would otherwise emit ⌘/⌃/⇧ and break the Ctrl/Shift/Win
+// expectations below).
+vi.mock("@/lib/platform", () => ({
+  IS_MAC: false,
+  IS_LINUX: true,
+  IS_WINDOWS: false,
+  MOD_PROP: "ctrl",
+}));
 
 function event(over: Partial<KeyboardEvent>): KeyboardEvent {
   return {
