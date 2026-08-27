@@ -165,16 +165,42 @@ func buildRequest(ctx context.Context, args types.AiHttpRequestArgs) (*http.Requ
 func newClient(allowPrivate bool) *http.Client {
 	dialer := &net.Dialer{Timeout: 30 * time.Second}
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, _, err := net.SplitHostPort(addr)
+			host, port, err := net.SplitHostPort(addr)
 			if err != nil {
 				return nil, err
 			}
-			if !allowPrivate && (isPrivateHost(host) || isLocalHost(host)) {
-				return nil, errors.New("private network access denied")
+			// Resolve up front and dial the IPs we actually checked. Checking
+			// only the literal hostname lets a hostname that resolves to a
+			// private address (e.g. `127.0.0.1.nip.io`, `myrouter.lan`)
+			// bypass the block; resolving first also defeats DNS-rebinding
+			// between the check and the dial.
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, err
 			}
-			return dialer.DialContext(ctx, network, addr)
+			if len(ips) == 0 {
+				return nil, errors.New("no addresses resolved")
+			}
+			if !allowPrivate {
+				for _, ip := range ips {
+					if isPrivateIP(ip.IP) {
+						return nil, errors.New("private network access denied")
+					}
+				}
+			}
+			var lastErr error
+			for _, ip := range ips {
+				conn, err := dialer.DialContext(
+					ctx, network, net.JoinHostPort(ip.IP.String(), port),
+				)
+				if err == nil {
+					return conn, nil
+				}
+				lastErr = err
+			}
+			return nil, lastErr
 		},
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,
@@ -185,16 +211,8 @@ func newClient(allowPrivate bool) *http.Client {
 	return &http.Client{Transport: transport, Timeout: 0}
 }
 
-func isPrivateHost(host string) bool {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
+func isPrivateIP(ip net.IP) bool {
 	return ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLoopback()
-}
-
-func isLocalHost(host string) bool {
-	return host == "localhost"
 }
 
 // bytesReader wraps a byte slice as io.Reader. We avoid bytes.NewReader so

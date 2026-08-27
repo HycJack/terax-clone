@@ -22,6 +22,35 @@ var (
 	launchDir = ""
 )
 
+// canonicalizePath resolves a path to its symlink-free absolute form. For
+// not-yet-existing targets (about to be created) it canonicalizes the deepest
+// existing ancestor and re-appends the remainder, so a write under a
+// symlinked root (e.g. macOS /tmp -> /private/tmp) still matches.
+func canonicalizePath(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved
+	}
+	dir := abs
+	var tail []string
+	for {
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			parts := append([]string{r}, tail...)
+			return filepath.Join(parts...)
+		}
+		base := filepath.Base(dir)
+		tail = append([]string{base}, tail...)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return abs
+		}
+		dir = parent
+	}
+}
+
 // InitLaunchCwd sets the default cwd used when no workspace is selected.
 // It also automatically authorises the directory so the user can browse
 // files without going through the authorisation dialog on first launch.
@@ -30,12 +59,12 @@ func InitLaunchCwd(dir string) {
 	defer mu.Unlock()
 	if dir != "" {
 		launchDir = dir
-		cwd = dir
-		allowed[dir] = true
+		cwd = canonicalizePath(dir)
+		allowed[cwd] = true
 	} else if cwd == "" {
 		if wd, err := os.Getwd(); err == nil {
-			cwd = wd
-			allowed[wd] = true
+			cwd = canonicalizePath(wd)
+			allowed[cwd] = true
 		}
 	}
 }
@@ -45,10 +74,7 @@ func Authorize(dir string) error {
 	if dir == "" {
 		return errors.New("empty dir")
 	}
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return err
-	}
+	abs := canonicalizePath(dir)
 	mu.Lock()
 	defer mu.Unlock()
 	allowed[abs] = true
@@ -70,10 +96,7 @@ func CurrentDir() string {
 
 // SetCwd updates the active cwd if it's already authorized.
 func SetCwd(dir string) error {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return err
-	}
+	abs := canonicalizePath(dir)
 	mu.Lock()
 	defer mu.Unlock()
 	if !allowed[abs] && !allowed[filepath.Dir(abs)] {
@@ -211,18 +234,20 @@ func TranslateWSLPath(p string) string {
 
 // IsAuthorized reports whether a path is in the registry.
 func IsAuthorized(p string) bool {
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return false
-	}
+	// Resolve symlinks so a link inside an authorized tree that points
+	// outside (e.g. `proj/link -> /etc/passwd`) can't smuggle reads/writes
+	// out of the sandbox. Authorized roots are stored canonical too, so
+	// symlink aliases of a workspace (macOS /tmp -> /private/tmp) still
+	// match.
+	check := canonicalizePath(p)
 	mu.Lock()
 	defer mu.Unlock()
-	if allowed[abs] {
+	if allowed[check] {
 		return true
 	}
 	sep := string(filepath.Separator)
 	for a := range allowed {
-		if strings.HasPrefix(abs, a+sep) || abs == a {
+		if strings.HasPrefix(check, a+sep) || check == a {
 			return true
 		}
 	}
