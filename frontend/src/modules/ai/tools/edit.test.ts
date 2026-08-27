@@ -17,9 +17,48 @@ vi.mock("../lib/security", () => ({
   })),
 }));
 
+// Controllable plan-store mock: the plan-mode tests flip `active` and inspect
+// the queued entries, the rest of the suite keeps it inactive.
+const planMock = vi.hoisted(() => {
+  let active = false;
+  let queue: Array<{
+    path: string;
+    proposedContent: string;
+    originalContent: string;
+    kind: string;
+    isNewFile: boolean;
+  }> = [];
+  return {
+    __setActive: (v: boolean) => {
+      active = v;
+    },
+    __getQueue: () => queue,
+    __reset: () => {
+      active = false;
+      queue = [];
+    },
+    newQueuedEditId: () => `queued-edit-${queue.length}`,
+    usePlanStore: {
+      getState: () => ({
+        active,
+        queue,
+        enqueue: (q: {
+          path: string;
+          proposedContent: string;
+          originalContent: string;
+          kind: string;
+          isNewFile: boolean;
+        }) => {
+          queue.push(q);
+        },
+      }),
+    },
+  };
+});
+
 vi.mock("../store/planStore", () => ({
-  newQueuedEditId: () => "queued-edit",
-  usePlanStore: { getState: () => ({ active: false, enqueue: vi.fn() }) },
+  newQueuedEditId: planMock.newQueuedEditId,
+  usePlanStore: planMock.usePlanStore,
 }));
 
 import { buildEditTools } from "./edit";
@@ -81,6 +120,7 @@ async function runMultiEdit(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  planMock.__reset();
   nativeMock.canonicalize.mockImplementation(async (p: string) => p);
   nativeMock.writeFile.mockResolvedValue(undefined);
 });
@@ -227,6 +267,54 @@ describe("multi_edit atomicity", () => {
       ],
     });
     expect(result.error).toContain("not unique");
+    expect(nativeMock.writeFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("edit tool in plan mode", () => {
+  it("queues the first edit against the disk snapshot", async () => {
+    planMock.__setActive(true);
+    setFile("alpha\nbeta\ngamma\n");
+    const result = await runEdit(readContext(), {
+      path: FILE,
+      old_string: "alpha",
+      new_string: "ALPHA",
+    });
+    expect(result.error).toBeUndefined();
+    // Nothing written in plan mode.
+    expect(nativeMock.writeFile).not.toHaveBeenCalled();
+
+    const [entry] = planMock.__getQueue();
+    expect(entry.originalContent).toBe("alpha\nbeta\ngamma\n");
+    expect(entry.proposedContent).toBe("ALPHA\nbeta\ngamma\n");
+  });
+
+  it("chains consecutive edits to the same file instead of clobbering", async () => {
+    planMock.__setActive(true);
+    setFile("line one\nline two\nline three\n");
+
+    const r1 = await runEdit(readContext(), {
+      path: FILE,
+      old_string: "line one",
+      new_string: "line ONE",
+    });
+    expect(r1.error).toBeUndefined();
+
+    // Second edit must apply against the FIRST edit's proposed content —
+    // otherwise both edits are computed against the unchanged disk snapshot
+    // and the later write clobbers the earlier one when the plan is applied.
+    const r2 = await runEdit(readContext(), {
+      path: FILE,
+      old_string: "line two",
+      new_string: "line TWO",
+    });
+    expect(r2.error).toBeUndefined();
+
+    const queue = planMock.__getQueue();
+    expect(queue.length).toBe(2);
+    expect(queue[1].proposedContent).toBe("line ONE\nline TWO\nline three\n");
+    expect(queue[1].proposedContent).toContain("line ONE");
+    expect(queue[1].proposedContent).toContain("line TWO");
     expect(nativeMock.writeFile).not.toHaveBeenCalled();
   });
 });

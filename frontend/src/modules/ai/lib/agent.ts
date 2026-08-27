@@ -24,6 +24,7 @@ import {
 } from "../config";
 import { buildTools, type ToolContext } from "../tools/tools";
 import { compactModelMessagesDetailed } from "./compact";
+import { isCriticalMode } from "./approval";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
 import { prepareAgentPrompt } from "./prompt";
 import { createProxyFetch } from "./proxyFetch";
@@ -301,6 +302,10 @@ export function buildConfiguredLanguageModel(
 const PLAN_MODE_PROMPT = `## PLAN MODE — ACTIVE
 Mutating tools (write_file, edit, multi_edit, create_directory) will queue their changes for the user to review as a single diff. Do NOT execute bash_run or bash_background while plan mode is active — restrict yourself to reads (read_file, grep, glob, list_directory) and the queued mutations. After queueing the full set of edits, stop and return a brief summary; do not continue acting until the user has accepted/rejected.`;
 
+const APPROVAL_MODE_PROMPT = `## APPROVAL MODE — CRITICAL-ONLY
+File edits and writes INSIDE the current workspace (workspace_root) are AUTO-APPROVED and execute immediately — do not narrate them, do not ask "should I write this?", and do not echo the file content first; the change is already happening.
+You still MUST WAIT for the user's approval card before: bash_run, bash_background, spawn_coding_agent, send_to_agent, and any edit/write whose path resolves OUTSIDE the workspace_root. If you see an approval card, stop and wait for the user to accept or reject it before continuing.`;
+
 function buildStableSystem(
   modelId: string,
   persona: { name: string; instructions: string } | null,
@@ -391,6 +396,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.customInstructions,
     opts.projectMemory ?? null,
   );
+  const approvalNote = isCriticalMode() ? `\n\n${APPROVAL_MODE_PROMPT}` : "";
 
   const history = await convertToModelMessages(opts.uiMessages);
   const keepsReasoning = modelKeepsReasoning(info);
@@ -413,7 +419,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
   }
 
   const prompt = prepareAgentPrompt(
-    stableSystem,
+    `${stableSystem}${approvalNote}`,
     opts.planMode ? PLAN_MODE_PROMPT : null,
     compactedHistory,
     provider,

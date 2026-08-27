@@ -1,3 +1,10 @@
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +33,11 @@ import {
   useSnippetsStore,
 } from "@/modules/ai/store/snippetsStore";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { setCustomInstructions } from "@/modules/settings/store";
+import {
+  type AgentApprovalMode,
+  setAgentApprovalMode,
+  setCustomInstructions,
+} from "@/modules/settings/store";
 import {
   Add01Icon,
   CheckmarkCircle02Icon,
@@ -37,6 +48,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useRef, useState } from "react";
 import { SectionHeader } from "../components/SectionHeader";
+import { SettingRow } from "../components/SettingRow";
 
 const ICON_OPTIONS: AgentIconId[] = [
   "coder",
@@ -77,6 +89,8 @@ export function AgentsSection() {
       />
 
       <CustomInstructionsBlock value={customInstructions} />
+
+      <ApprovalModeBlock />
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -521,6 +535,33 @@ function SnippetEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ApprovalModeBlock() {
+  const mode = usePreferencesStore((s) => s.agentApprovalMode);
+  return (
+    <SettingRow
+      title="Tool approval"
+      description={
+        mode === "critical"
+          ? "File edits inside the current workspace run automatically; shell commands, background processes, agent delegation, and edits outside the workspace still ask."
+          : "Every mutating tool (edit, write, shell, delegation) pauses for your approval."
+      }
+    >
+      <Select
+        value={mode}
+        onValueChange={(v) => void setAgentApprovalMode(v as AgentApprovalMode)}
+      >
+        <SelectTrigger className="h-8 w-[210px] text-[12px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="always">Ask before every change</SelectItem>
+          <SelectItem value="critical">Only critical steps</SelectItem>
+        </SelectContent>
+      </Select>
+    </SettingRow>
   );
 }
 
