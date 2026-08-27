@@ -405,12 +405,24 @@ func (s *Session) runCommand(command, cwd string, timeout time.Duration) (*types
 	cmd.Env = os.Environ()
 
 	var out bytes.Buffer
+	var errOut bytes.Buffer
 	cmd.Stdout = &out
-	cmd.Stderr = &out // merge stderr into stdout for capture
+	cmd.Stderr = &errOut // keep stderr separate so result.Stderr is populated
 	runErr := cmd.Run()
 	timedOut := ctx.Err() == context.DeadlineExceeded
 
-	return s.parseMarkers(out.String(), exitMarker, cwdMarker, doneMarker, timedOut, maxOutput, runErr)
+	result, err := s.parseMarkers(out.String(), exitMarker, cwdMarker, doneMarker, timedOut, maxOutput, runErr)
+	if err != nil {
+		return nil, err
+	}
+	// Cap stderr the same way stdout is capped.
+	if errOut.Len() > maxOutput {
+		result.Stderr = errOut.String()[:maxOutput]
+		result.Truncated = true
+	} else {
+		result.Stderr = errOut.String()
+	}
+	return result, nil
 }
 
 // writeTempBatch writes `contents` to a temp .bat file and returns its
