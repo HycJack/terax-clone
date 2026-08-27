@@ -74,6 +74,18 @@ export type BuildModelOptions = {
 
 const modelCache = new Map<string, LanguageModel>();
 
+// Bounded so key rotations / provider tweaks don't grow the map unboundedly.
+const MODEL_CACHE_LIMIT = 10;
+function cacheModel(key: string, model: LanguageModel): void {
+  modelCache.delete(key);
+  modelCache.set(key, model);
+  while (modelCache.size > MODEL_CACHE_LIMIT) {
+    const oldest = modelCache.keys().next().value;
+    if (oldest === undefined) break;
+    modelCache.delete(oldest);
+  }
+}
+
 export async function buildLanguageModel(
   provider: ProviderId,
   keys: ProviderKeys,
@@ -213,7 +225,7 @@ export async function buildLanguageModel(
       throw new Error(`Unsupported provider: ${_exhaustive as ProviderId}`);
     }
   }
-  modelCache.set(cacheKey, built);
+  cacheModel(cacheKey, built);
   return built;
 }
 

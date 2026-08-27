@@ -14,10 +14,6 @@ type RunStatus =
   | "awaiting-approval"
   | "error";
 
-function isBusy(s: RunStatus): boolean {
-  return s === "thinking" || s === "streaming" || s === "awaiting-approval";
-}
-
 function liveStatus(s: RunStatus): AgentStatus | null {
   if (s === "awaiting-approval") return "waiting";
   if (s === "thinking" || s === "streaming") return "working";
@@ -37,8 +33,9 @@ export function LocalAgentNotificationsBridge() {
   const prev = useRef<RunStatus>(status);
 
   useEffect(() => {
+    const live = liveStatus(status);
     useAgentStore.getState().setLocalAgent(
-      liveStatus(status) ? { agent: AGENT, status: liveStatus(status)! } : null,
+      live ? { agent: AGENT, status: live } : null,
     );
 
     const was = prev.current;
@@ -66,7 +63,13 @@ export function LocalAgentNotificationsBridge() {
       fire("attention", "Terax needs your approval", "Approve a tool to continue");
     } else if (status === "error") {
       fire("error", "Terax run failed", error ?? undefined);
-    } else if (status === "idle" && isBusy(was)) {
+    } else if (
+      status === "idle" &&
+      (was === "thinking" || was === "streaming")
+    ) {
+      // Only announce completion for a genuinely finished run. A deny on an
+      // approval card transitions awaiting-approval -> idle, and error -> idle
+      // already notified — both would otherwise fire a spurious "finished".
       fire("finished", "Terax finished", "Your task is ready");
     }
   }, [status, error]);

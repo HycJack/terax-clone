@@ -2,7 +2,7 @@ import { useChat, type UIMessage } from "@ai-sdk/react";
 import type { ToolUIPart, UIMessagePart } from "ai";
 import { useEffect, useMemo, useRef } from "react";
 import { native } from "../lib/native";
-import { checkReadable } from "../lib/security";
+import { checkReadableCanonical } from "../lib/security";
 import { resolvePath } from "../tools/tools";
 import {
   flushPersist,
@@ -352,12 +352,13 @@ function applyEditsLocally(
 async function readOriginal(
   abs: string,
 ): Promise<{ content: string; isNewFile: boolean }> {
-  // The fs guard rejects sensitive paths even on read; mirror that here so
-  // the user sees an empty "before" rather than an error tab.
-  const safety = checkReadable(abs);
+  // Mirror the fs guard on the canonical path (symlinks resolved) so a link
+  // whose lexical path looks safe but points at a protected file is refused
+  // here too, not just at the write site.
+  const safety = await checkReadableCanonical(abs, native.canonicalize);
   if (!safety.ok) return { content: "", isNewFile: false };
   try {
-    const r = await native.readFile(abs);
+    const r = await native.readFile(safety.canonical);
     if (r.kind === "text") return { content: r.content, isNewFile: false };
     // Binary or oversized — we can't render the original sensibly. Show the
     // proposed content as a "new" view; the user can still cancel.

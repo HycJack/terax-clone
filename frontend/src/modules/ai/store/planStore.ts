@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { native } from "../lib/native";
+import { checkWritableCanonical } from "../lib/security";
 
 export type QueuedEdit = {
   id: string;
@@ -51,9 +52,21 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     for (const q of items) {
       try {
         if (q.kind === "create_directory") {
-          await native.createDir(q.path);
+          // Re-validate security at apply time: the queue may have been built
+          // in a different workspace or before the security rules changed.
+          const safety = await checkWritableCanonical(q.path, native.canonicalize);
+          if (!safety.ok) {
+            results.push({ id: q.id, ok: false, error: safety.reason });
+            continue;
+          }
+          await native.createDir(safety.canonical);
         } else {
-          await native.writeFile(q.path, q.proposedContent);
+          const safety = await checkWritableCanonical(q.path, native.canonicalize);
+          if (!safety.ok) {
+            results.push({ id: q.id, ok: false, error: safety.reason });
+            continue;
+          }
+          await native.writeFile(safety.canonical, q.proposedContent);
         }
         results.push({ id: q.id, ok: true });
       } catch (e) {
