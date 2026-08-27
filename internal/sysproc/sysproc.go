@@ -5,16 +5,7 @@
 // a no-op (or sets the process group, depending on caller needs).
 package sysproc
 
-import (
-	"os/exec"
-	"runtime"
-	"syscall"
-)
-
-// CREATE_NO_WINDOW is the Windows process creation flag that suppresses
-// the console window. Constant value 0x08000000 (CREATE_NO_WINDOW).
-// See https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
-const CREATE_NO_WINDOW = 0x08000000
+import "os/exec"
 
 // HideWindow configures `cmd` so that spawning it on Windows does not
 // flash a console window. On non-Windows hosts it is a no-op.
@@ -28,14 +19,5 @@ func HideWindow(cmd *exec.Cmd) {
 	if cmd == nil {
 		return
 	}
-	if runtime.GOOS != "windows" {
-		return
-	}
-	// Preserve any existing flags the caller may have set.
-	var flags uint32
-	if cmd.SysProcAttr != nil {
-		flags = cmd.SysProcAttr.CreationFlags
-	}
-	flags |= CREATE_NO_WINDOW
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: flags}
+	hideWindow(cmd)
 }

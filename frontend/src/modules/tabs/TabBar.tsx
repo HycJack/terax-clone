@@ -577,7 +577,7 @@ function useTabAgentStatus(tab: Tab) {
 
 export function TabIcon({ tab }: { tab: Tab }) {
   const agentStatus = useTabAgentStatus(tab);
-  if (tab.kind === "editor" || tab.kind === "markdown") {
+  if (tab.kind === "editor" || tab.kind === "markdown" || tab.kind === "viewer") {
     const url =
       tab.kind === "editor" && tab.overrideLanguage
         ? fileIconUrl(`dummy.${tab.overrideLanguage}`)

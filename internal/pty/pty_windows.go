@@ -6,7 +6,19 @@ import (
 	"os"
 	"syscall"
 	"time"
+
+	"terax/internal/sysproc"
 )
+
+// platformProcAttr returns the child process attributes for Windows:
+// CREATE_NEW_PROCESS_GROUP so Ctrl+C / kill signal affects only the child,
+// not the host; CREATE_NO_WINDOW so spawning cmd.exe / powershell / pwsh
+// doesn't flash a console window.
+func platformProcAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{
+		CreationFlags: 0x00000200 | sysproc.CREATE_NO_WINDOW,
+	}
+}
 
 var (
 	// procGenerateCtrlC is resolved lazily from kernel32.dll (declared in

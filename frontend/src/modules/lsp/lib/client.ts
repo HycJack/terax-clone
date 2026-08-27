@@ -13,6 +13,7 @@ import {
   ViewPlugin,
 } from "@codemirror/view";
 import { highlightCode } from "@lezer/highlight";
+import { openUrl } from "@/lib/wails/plugin-opener";
 import {
   LanguageServerClient,
   languageServerPlugin,
@@ -23,8 +24,10 @@ import {
   locationsPanel,
   openLocationsPanel,
 } from "./locationsPanel";
-import { jumpHistory, type JumpPos } from "./jumpHistory";
+import { goBack, goForward, recordJump } from "./navigationHistory";
 import { getLspNavigator } from "./navigator";
+import { openPeek, peekPanel, type PeekLocation } from "./peek";
+import { lspUiTheme } from "./theme";
 import { fileUriToPath } from "./uri";
 
 export {
@@ -140,6 +143,38 @@ const hoverCodeHighlight = ViewPlugin.define((view) => {
   const seen = new WeakSet<HTMLElement>();
   const inner = new Map<Element, MutationObserver>();
 
+  const parseFileHref = (
+    href: string,
+  ): { path: string | null; line: number } => {
+    const m = href.match(/^file:\/\/([^#]*)(?:#(?:L)?(\d+))?$/);
+    if (!m) return { path: null, line: 1 };
+    let path = decodeURIComponent(m[1]);
+    if (/^\/[A-Za-z]:\//.test(path)) path = path.slice(1);
+    return { path, line: m[2] ? Number(m[2]) : 1 };
+  };
+
+  const attachLinks = (root: Element): void => {
+    const links = root.querySelectorAll<HTMLAnchorElement>(
+      ".documentation a[href]",
+    );
+    for (const a of links) {
+      if (a.dataset.lspLinked) continue;
+      a.dataset.lspLinked = "1";
+      a.classList.add("cm-lsp-doc-link");
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const href = a.getAttribute("href") ?? "";
+        if (href.startsWith("file://")) {
+          const { path, line } = parseFileHref(href);
+          if (path) getLspNavigator()?.openFile(path, line);
+        } else {
+          void openUrl(href).catch(() => {});
+        }
+      });
+    }
+  };
+
   const scan = (root: Element) => {
     const blocks = root.querySelectorAll<HTMLElement>(
       ".documentation pre code",
@@ -149,6 +184,7 @@ const hoverCodeHighlight = ViewPlugin.define((view) => {
       seen.add(el);
       highlightBlock(el, view);
     }
+    attachLinks(root);
   };
 
   const outer = new MutationObserver((muts) => {
@@ -245,16 +281,16 @@ export function lspInteractions(opts: {
   documentUri: string;
   rootPath: string;
 }): Extension {
-  // Move the cursor to a 0-based {line, character}. Same-file targets use
-  // exact selection; cross-file targets delegate to the global navigator
-  // (the same path definition jumps use) so history can restore across
-  // files even though each extension only knows its own documentUri.
-  const goTo = (view: EditorView, pos: LspPos, uri: string): void => {
-    if (uri === opts.documentUri) {
-      const targetLine = Math.min(pos.line + 1, view.state.doc.lines);
+  const navigate = (view: EditorView, loc: LspLocation): void => {
+    recordJump(view, opts.documentUri, loc.uri, loc.range.start.line);
+    if (loc.uri === opts.documentUri) {
+      const targetLine = Math.min(
+        loc.range.start.line + 1,
+        view.state.doc.lines,
+      );
       const lineObj = view.state.doc.line(targetLine);
       const target = Math.min(
-        lineObj.from + pos.character,
+        lineObj.from + loc.range.start.character,
         lineObj.to,
       );
       view.dispatch({
@@ -262,27 +298,10 @@ export function lspInteractions(opts: {
         effects: EditorView.scrollIntoView(target, { y: "center" }),
       });
       view.focus();
-      return;
+    } else {
+      const path = fileUriToPath(loc.uri);
+      if (path) getLspNavigator()?.openFile(path, loc.range.start.line + 1);
     }
-    const path = fileUriToPath(uri);
-    if (path) getLspNavigator()?.openFile(path, pos.line + 1);
-  };
-
-  // current position (0-based) so we can record it as a history origin.
-  const currentPos = (view: EditorView): JumpPos => {
-    const { head } = view.state.selection.main;
-    const lineObj = view.state.doc.lineAt(head);
-    return {
-      uri: opts.documentUri,
-      line: lineObj.number - 1,
-      character: head - lineObj.from,
-    };
-  };
-
-  const navigate = (view: EditorView, loc: LspLocation): void => {
-    // Record where the cursor was so Ctrl+Alt+←/→ can retrace the jump.
-    jumpHistory.push(currentPos(view));
-    goTo(view, loc.range.start, loc.uri);
   };
 
   const label = (loc: LspLocation): string => {
@@ -362,8 +381,47 @@ export function lspInteractions(opts: {
     showResults(view, "References", result ?? []);
   };
 
+  const peekDefinition = async (
+    view: EditorView,
+    pos: number,
+  ): Promise<void> => {
+    let result: DefinitionResult;
+    try {
+      result = await opts.client.textDocumentDefinition({
+        textDocument: { uri: opts.documentUri },
+        position: positionAt(view, pos),
+      });
+    } catch {
+      return;
+    }
+    const locs = normalizeLocations(result);
+    if (locs.length === 0) return;
+    const locations: PeekLocation[] = locs.map((l) => ({
+      uri: l.uri,
+      line: l.range.start.line,
+      character: l.range.start.character,
+      label: label(l),
+    }));
+    openPeek(view, {
+      locations,
+      index: 0,
+      title: "Definitions",
+      currentUri: opts.documentUri,
+      onOpen: (loc) => {
+        navigate(view, {
+          uri: loc.uri,
+          range: {
+            start: { line: loc.line, character: loc.character },
+          },
+        });
+      },
+    });
+  };
+
   return [
     locationsPanel,
+    peekPanel,
+    lspUiTheme,
     hoverCodeHighlight,
     linkHover,
     keymap.of([
@@ -372,6 +430,14 @@ export function lspInteractions(opts: {
         preventDefault: true,
         run: (view) => {
           void gotoDefinition(view, view.state.selection.main.head);
+          return true;
+        },
+      },
+      {
+        key: "Alt-F12",
+        preventDefault: true,
+        run: (view) => {
+          void peekDefinition(view, view.state.selection.main.head);
           return true;
         },
       },
@@ -389,24 +455,12 @@ export function lspInteractions(opts: {
         run: renameSymbol,
       },
       {
-        key: "Mod-Alt-ArrowLeft",
-        mac: "Mod-Alt-ArrowLeft",
-        preventDefault: true,
-        run: (view) => {
-          const target = jumpHistory.back();
-          if (target) goTo(view, target, target.uri);
-          return true;
-        },
+        key: "Ctrl--",
+        run: (view) => goBack(view, opts.documentUri),
       },
       {
-        key: "Mod-Alt-ArrowRight",
-        mac: "Mod-Alt-ArrowRight",
-        preventDefault: true,
-        run: (view) => {
-          const target = jumpHistory.forward();
-          if (target) goTo(view, target, target.uri);
-          return true;
-        },
+        key: "Ctrl-Shift--",
+        run: (view) => goForward(view, opts.documentUri),
       },
       {
         key: "Shift-Alt-f",

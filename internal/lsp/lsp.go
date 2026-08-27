@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -45,7 +46,11 @@ func NewManager() *Manager {
 
 // Spawn starts an LSP server child process.
 func Spawn(ctx context.Context, m *Manager, args types.LspSpawnArgs) (*Session, error) {
-	cmd := exec.CommandContext(ctx, args.Command, args.Args...)
+	bin, err := lookPath(args.Command)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, bin, args.Args...)
 	sysproc.HideWindow(cmd)
 	cmd.Env = mergeEnv(args.Env)
 	stdin, err := cmd.StdinPipe()
@@ -56,8 +61,8 @@ func Spawn(ctx context.Context, m *Manager, args types.LspSpawnArgs) (*Session, 
 	if err != nil {
 		return nil, err
 	}
-	var stderrBuf cappedBuffer
-	cmd.Stderr = &stderrBuf
+	var stderrBuf = newCappedBuffer(64 * 1024)
+	cmd.Stderr = stderrBuf
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -77,13 +82,15 @@ func Spawn(ctx context.Context, m *Manager, args types.LspSpawnArgs) (*Session, 
 	// header framing and emit each body as an event.
 	go sess.read(ctx, stdout)
 	// Wait goroutine: emits the exit info once the child terminates.
-	go sess.wait(ctx, &stderrBuf)
+	go sess.wait(ctx, stderrBuf)
 
 	return sess, nil
 }
 
-// Send writes one JSON-RPC message to the LSP server. The frontend formats
-// the body (with Content-Length header) before calling.
+// Send writes one JSON-RPC message to the LSP server. The LSP wire protocol
+// frames every message with a `Content-Length` header; codemirror-
+// languageserver hands the transport the bare JSON body, so we add the
+// framing here before writing to the child's stdin.
 func (m *Manager) Send(id int, message string) error {
 	m.mu.RLock()
 	s, ok := m.sessions[id]
@@ -96,8 +103,18 @@ func (m *Manager) Send(id int, message string) error {
 	if s.closed.Load() {
 		return fmt.Errorf("lsp session %d closed", id)
 	}
-	_, err := io.WriteString(s.Stdin, message)
+	_, err := io.WriteString(s.Stdin, frameMessage(message))
 	return err
+}
+
+// frameMessage adds the LSP `Content-Length` framing header. Already-framed
+// messages pass through untouched so a future client-side framing change
+// stays safe.
+func frameMessage(message string) string {
+	if strings.HasPrefix(message, "Content-Length:") {
+		return message
+	}
+	return fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(message), message)
 }
 
 // Kill terminates the session.
@@ -128,10 +145,10 @@ func (m *Manager) KillAll() {
 	m.sessions = map[int]*Session{}
 }
 
-// Detect checks whether a binary exists on PATH. The frontend calls this
-// before deciding whether to enable a preset.
+// Detect checks whether a binary exists on the augmented PATH. The frontend
+// calls this before deciding whether to enable a preset.
 func Detect(command string) bool {
-	_, err := exec.LookPath(command)
+	_, err := lookPath(command)
 	return err == nil
 }
 
@@ -208,17 +225,101 @@ func (s *Session) wait(ctx context.Context, stderrBuf *cappedBuffer) {
 
 func mergeEnv(extra map[string]string) []string {
 	base := os_env()
+	path := augmentedPath()
+	replaced := false
+	for i, kv := range base {
+		k, _, ok := strings.Cut(kv, "=")
+		if ok && k == "PATH" {
+			base[i] = "PATH=" + path
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		base = append(base, "PATH="+path)
+	}
 	for k, v := range extra {
 		base = append(base, k+"="+v)
 	}
 	return base
 }
 
-// cappedBuffer collects up to 64 KiB of stderr for the LspExitInfo payload.
+// toolDirs returns directories that commonly hold language-server binaries
+// (gopls, clangd, typescript-language-server, rust-analyzer, ...) but that
+// are frequently absent from the PATH of a GUI-launched app or a minimal
+// shell. GOPATH/bin and $HOME/go/bin cover the canonical Go tool install.
+func toolDirs() []string {
+	home, _ := homeDir()
+	dirs := []string{}
+	add := func(d string) {
+		if d != "" && d != "." {
+			dirs = append(dirs, d)
+		}
+	}
+	add(getenv("GOPATH") + "/bin")
+	add(home + "/go/bin")
+	add("/usr/local/go/bin")
+	add("/opt/homebrew/bin")
+	add("/usr/local/bin")
+	add(home + "/.cargo/bin")
+	add(home + "/.local/bin")
+	add(home + "/.bun/bin")
+	add(home + "/.npm-global/bin")
+	return dirs
+}
+
+// augmentedPath prepends toolDirs entries to the process PATH, keeping any
+// directory that is already present in place (no duplicates).
+func augmentedPath() string {
+	path := getenv("PATH")
+	parts := strings.Split(path, string(os.PathListSeparator))
+	has := func(dir string) bool {
+		for _, p := range parts {
+			if p == dir {
+				return true
+			}
+		}
+		return false
+	}
+	for _, d := range toolDirs() {
+		if !has(d) {
+			path = d + string(os.PathListSeparator) + path
+		}
+	}
+	return path
+}
+
+// lookPath resolves `command` against the augmented PATH. Slash-containing
+// paths (absolute or relative) are used as-is.
+func lookPath(command string) (string, error) {
+	if strings.ContainsRune(command, '/') {
+		if _, err := stat(command); err == nil {
+			return command, nil
+		}
+		return "", fmt.Errorf("lsp: command %q not found", command)
+	}
+	for _, dir := range strings.Split(augmentedPath(), string(os.PathListSeparator)) {
+		if dir == "" {
+			continue
+		}
+		candidate := dir + "/" + command
+		if _, err := stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("lsp: %q not found on PATH", command)
+}
+
+// cappedBuffer collects up to `max` bytes of stderr, keeping only the tail
+// once it fills up. The tail is what the frontend shows on LSP exit.
 type cappedBuffer struct {
 	mu  sync.Mutex
 	buf []byte
 	max int
+}
+
+func newCappedBuffer(max int) *cappedBuffer {
+	return &cappedBuffer{max: max}
 }
 
 func (b *cappedBuffer) Write(p []byte) (int, error) {
@@ -249,12 +350,16 @@ var (
 	parentPath  = defaultParent
 	osEnv       = defaultEnv
 	osGetpid    = defaultGetpid
+	getenv      = defaultGetenv
+	homeDir     = defaultHomeDir
 )
 
 func defaultStat(path string) (any, error)                 { return osStatImpl(path) }
 func defaultParent(p string) string                        { return parentImpl(p) }
 func defaultEnv() []string                                 { return envImpl() }
 func defaultGetpid() int                                   { return pidImpl() }
+func defaultGetenv(key string) string                      { return os.Getenv(key) }
+func defaultHomeDir() (string, error)                      { return os.UserHomeDir() }
 
 // EncodeError is unused (frontend does its own JSON) but kept for symmetry.
 var _ = json.Marshal

@@ -77,6 +77,14 @@ export function EditorContextMenu({ children, cm }: Props) {
         <ContextMenuItem
           className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
           disabled={!actionsEnabled}
+          onSelect={() => runLspAction("Alt-F12", "Peek Definition")}
+        >
+          Peek Definition
+          <ContextMenuShortcut>⌥F12</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="rounded-xl px-2.5 py-1.5 text-xs gap-2"
+          disabled={!actionsEnabled}
           onSelect={() => runLspAction("Shift-F12", "Find References")}
         >
           Find References

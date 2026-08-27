@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { native } from "../lib/native";
 import { checkWritableCanonical } from "../lib/security";
+import { writeNeedsApproval } from "../lib/approval";
 import { newQueuedEditId, usePlanStore } from "../store/planStore";
 import { resolvePath, type ToolContext } from "./context";
 
@@ -21,14 +22,40 @@ async function applyEdits(
   kind: "edit" | "multi_edit",
   readCache: Map<string, { size: number; hash: number }>,
 ): Promise<EditResult> {
-  const r = await native.readFile(abs);
-  if (r.kind === "binary")
-    return { error: "binary file refused", path: abs };
-  if (r.kind === "toolarge")
-    return { error: `file too large (${r.size} bytes)`, path: abs };
+  const planActive = usePlanStore.getState().active;
 
-  const original = r.content;
-  let content = original;
+  // Resolve the base content. In plan mode nothing is written yet, so
+  // consecutive edits to the same file must chain onto the previous edit's
+  // proposed content — otherwise each edit is computed against the (still
+  // unchanged) disk snapshot and the later writes clobber the earlier ones.
+  let original: string;
+  let content: string;
+  if (planActive) {
+    const pending = [...usePlanStore.getState().queue]
+      .reverse()
+      .find((q) => q.path === abs && q.kind !== "create_directory");
+    if (pending) {
+      original = pending.proposedContent;
+      content = pending.proposedContent;
+    } else {
+      const r = await native.readFile(abs);
+      if (r.kind === "binary")
+        return { error: "binary file refused", path: abs };
+      if (r.kind === "toolarge")
+        return { error: `file too large (${r.size} bytes)`, path: abs };
+      original = r.content;
+      content = r.content;
+    }
+  } else {
+    const r = await native.readFile(abs);
+    if (r.kind === "binary")
+      return { error: "binary file refused", path: abs };
+    if (r.kind === "toolarge")
+      return { error: `file too large (${r.size} bytes)`, path: abs };
+    original = r.content;
+    content = r.content;
+  }
+
   let totalReplacements = 0;
 
   for (const e of edits) {
@@ -86,7 +113,7 @@ async function applyEdits(
     }
   }
 
-  if (usePlanStore.getState().active) {
+  if (planActive) {
     usePlanStore.getState().enqueue({
       id: newQueuedEditId(),
       kind,
@@ -121,7 +148,7 @@ export function buildEditTools(ctx: ToolContext) {
   return {
     edit: tool({
       description:
-        "Replace an exact string in a file. Requires read_file on this path first in the current session — this prevents blind edits. `old_string` must be unique in the file unless `replace_all: true`. Asks for user approval before writing.",
+        "Replace an exact string in a file. Requires read_file on this path first in the current session — this prevents blind edits. `old_string` must be unique in the file unless `replace_all: true`. Approval behavior depends on the approval mode setting: edits inside the current workspace auto-run in critical mode, otherwise a confirmation card appears.",
       inputSchema: z.object({
         path: z.string(),
         old_string: z
@@ -130,7 +157,7 @@ export function buildEditTools(ctx: ToolContext) {
         new_string: z.string().describe("Replacement substring."),
         replace_all: z.boolean().optional(),
       }),
-      needsApproval: true,
+      needsApproval: (input) => writeNeedsApproval(ctx, input.path),
       execute: async ({ path, old_string, new_string, replace_all }) => {
         const reqPath = resolvePath(path, ctx.getCwd());
         const safety = await checkWritableCanonical(reqPath, native.canonicalize);
@@ -154,7 +181,7 @@ export function buildEditTools(ctx: ToolContext) {
 
     multi_edit: tool({
       description:
-        "Apply several exact-string replacements to a single file atomically. Each edit is applied in order to the running buffer; if any edit's old_string is missing or non-unique, the whole batch aborts before writing. Requires prior read_file on the path. Asks for user approval before writing.",
+        "Apply several exact-string replacements to a single file atomically. Each edit is applied in order to the running buffer; if any edit's old_string is missing or non-unique, the whole batch aborts before writing. Requires prior read_file on the path. Approval behavior depends on the approval mode setting: in-workspace edits auto-run in critical mode, otherwise a confirmation card appears.",
       inputSchema: z.object({
         path: z.string(),
         edits: z
@@ -167,7 +194,7 @@ export function buildEditTools(ctx: ToolContext) {
           )
           .min(1),
       }),
-      needsApproval: true,
+      needsApproval: (input) => writeNeedsApproval(ctx, input.path),
       execute: async ({ path, edits }) => {
         const reqPath = resolvePath(path, ctx.getCwd());
         const safety = await checkWritableCanonical(reqPath, native.canonicalize);

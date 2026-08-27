@@ -15,6 +15,7 @@ export {
   type EditorTab,
   type PreviewTab,
   type MarkdownTab,
+  type ViewerTab,
   type AiDiffTab,
   type GitDiffTab,
   type GitHistoryTab,

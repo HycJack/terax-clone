@@ -11,6 +11,15 @@ vi.mock("@/modules/settings/preferences", () => ({
   },
 }));
 
+// `shortcutLabel` renders default bindings via getBindingTokens, whose token
+// branch depends on IS_MAC. Pin to non-mac so expectations are deterministic.
+vi.mock("@/lib/platform", () => ({
+  IS_MAC: false,
+  IS_LINUX: true,
+  IS_WINDOWS: false,
+  MOD_PROP: "ctrl",
+}));
+
 import { shortcutLabel } from "./shortcutLabel";
 
 beforeEach(() => {

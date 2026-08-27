@@ -180,6 +180,7 @@ export type Preferences = {
   editorCustomFormatCommand: string;
   lspActivation: Record<string, LspActivation>;
   lspCustomServers: LspCustomServer[];
+  agentApprovalMode: AgentApprovalMode;
 };
 
 export type EditorFormatter =
@@ -220,6 +221,13 @@ const KEY_CUSTOM_INSTRUCTIONS = "customInstructions";
 const KEY_AUTOSTART = "autostart";
 const KEY_RESTORE_WINDOW = "restoreWindowState";
 export type AutocompleteTrigger = "auto" | "manual";
+
+/** How the AI agent's tool-call approvals behave. "always" asks before every
+ *  mutating tool (edit/write/shell). "critical" auto-approves file edits that
+ *  stay inside the current workspace and only asks for critical steps: shell
+ *  execution, background processes, agent delegation, and edits outside the
+ *  workspace. */
+export type AgentApprovalMode = "always" | "critical";
 
 const KEY_AUTOCOMPLETE_ENABLED = "autocompleteEnabled";
 const KEY_AUTOCOMPLETE_TRIGGER = "autocompleteTrigger";
@@ -269,6 +277,7 @@ const KEY_EDITOR_FORMATTER_BY_LANG = "editorFormatterByLang";
 const KEY_EDITOR_CUSTOM_FORMAT_COMMAND = "editorCustomFormatCommand";
 const KEY_LSP_ACTIVATION = "lspActivation";
 const KEY_LSP_CUSTOM_SERVERS = "lspCustomServers";
+const KEY_AGENT_APPROVAL_MODE = "agentApprovalMode";
 
 export const TERMINAL_FONT_SIZE_DEFAULT = 14;
 export const TERMINAL_FONT_SIZE_MIN = 8;
@@ -329,7 +338,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   editorWordWrap: false,
   showHidden: false,
   explorerGitDecorations: true,
-  terminalWebglEnabled: true,
+  // WebGL renderer defaults to OFF: its GPU glyph atlas corrupts on some macOS
+  // setups (especially with Nerd Fonts), making terminal text unreadable /
+  // desync from the real buffer. The DOM renderer is always correct.
+  terminalWebglEnabled: false,
   terminalCursorBlink: false,
   terminalCursorStyle: "bar",
   terminalFontFamily: "",
@@ -352,6 +364,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   editorCustomFormatCommand: "",
   lspActivation: {},
   lspCustomServers: [],
+  // Ask before every mutating tool by default; users can relax to "critical"
+  // in Settings → Agents.
+  agentApprovalMode: "always",
 };
 
 const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
@@ -545,7 +560,18 @@ export async function loadPreferences(): Promise<Preferences> {
     lspCustomServers:
       get<LspCustomServer[]>(KEY_LSP_CUSTOM_SERVERS) ??
       DEFAULT_PREFERENCES.lspCustomServers,
+    agentApprovalMode: coerceAgentApprovalMode(
+      get<unknown>(KEY_AGENT_APPROVAL_MODE),
+    ),
   };
+}
+
+export function coerceAgentApprovalMode(v: unknown): AgentApprovalMode {
+  return v === "critical" ? "critical" : "always";
+}
+
+export async function setAgentApprovalMode(value: AgentApprovalMode): Promise<void> {
+  await writePref(KEY_AGENT_APPROVAL_MODE, coerceAgentApprovalMode(value));
 }
 
 export async function setLspActivation(
@@ -954,6 +980,7 @@ export async function onPreferencesChange(
     [KEY_EDITOR_CUSTOM_FORMAT_COMMAND]: "editorCustomFormatCommand",
     [KEY_LSP_ACTIVATION]: "lspActivation",
     [KEY_LSP_CUSTOM_SERVERS]: "lspCustomServers",
+    [KEY_AGENT_APPROVAL_MODE]: "agentApprovalMode",
   };
   // Same-process writes still fire onChange immediately; cross-window writes
   // arrive via the Tauri event emitted by writePref().
