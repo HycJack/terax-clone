@@ -1,6 +1,9 @@
 import { generateText, stepCountIs } from "ai";
-import { DEFAULT_MODEL_ID, getModel, type ModelId } from "../config";
-import { buildLanguageModel } from "../lib/agent";
+import { DEFAULT_MODEL_ID, type ModelId } from "../config";
+import {
+  buildConfiguredLanguageModel,
+  type LocalProviderConfig,
+} from "../lib/agent";
 import type { ProviderKeys } from "../lib/keyring";
 import type { ToolContext } from "../tools/context";
 import { buildFsTools } from "../tools/fs";
@@ -15,7 +18,8 @@ type Args = {
   keys: ProviderKeys;
   modelId: string;
   toolContext: ToolContext;
-  lmstudioBaseURL?: string;
+  local?: LocalProviderConfig;
+  abortSignal?: AbortSignal;
   onStep?: (label: string) => void;
 };
 
@@ -31,7 +35,8 @@ export async function runSubagent({
   keys,
   modelId,
   toolContext,
-  lmstudioBaseURL,
+  local,
+  abortSignal,
   onStep,
 }: Args): Promise<RunResult> {
   const def = SUBAGENTS[type];
@@ -46,12 +51,11 @@ export async function runSubagent({
     if (t in readOnly) tools[t] = readOnly[t];
   }
 
-  const model = await buildLanguageModel(
-    getModel(modelId as ModelId).provider,
-    keys,
-    getModel(modelId as ModelId).id,
-    { lmstudioBaseURL },
-  );
+  // Use the same model builder as the main agent so local providers (MLX,
+  // Ollama, OpenAI-compatible, custom endpoints) are configured identically —
+  // previously only lmstudio was forwarded and other local providers hit the
+  // wrong default port.
+  const model = await buildConfiguredLanguageModel(modelId, keys, local ?? {});
 
   const start = Date.now();
   const result = await generateText({
@@ -59,6 +63,9 @@ export async function runSubagent({
     system: def.systemPrompt,
     prompt,
     tools: tools as Parameters<typeof generateText>[0]["tools"],
+    // Plumb the parent run's abort signal so chat.stop() / session eviction
+    // cancels an in-flight subagent instead of letting it burn tokens.
+    abortSignal,
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     onStepFinish: (step) => {
       if (!onStep) return;

@@ -56,4 +56,47 @@ describe("redactSensitive", () => {
     expect(out).not.toContain("AKIA1234567890ABCDEF");
     expect(out).not.toContain(`sk-proj-${"a".repeat(24)}`);
   });
+
+  it("redacts arbitrary *_TOKEN / *_SECRET / *_PASSWORD assignments", () => {
+    const input =
+      "NPM_TOKEN=npm_abcdefghijklmnop github CI: GITHUB_TOKEN=ghp_xyz123";
+    const out = redactSensitive(input);
+    expect(out).not.toContain("npm_abcdefghijklmnop");
+    expect(out).not.toContain("ghp_xyz123");
+    expect(out).toContain("NPM_TOKEN");
+    expect(out).toContain("GITHUB_TOKEN");
+    expect(out).toContain("<REDACTED>");
+  });
+
+  it("redacts an npm token even without its key name", () => {
+    const out = redactSensitive("token = npm_0123456789abcdef");
+    expect(out).not.toContain("npm_0123456789abcdef");
+  });
+
+  it("redacts credentials embedded in a database URL but keeps scheme and host", () => {
+    const out = redactSensitive(
+      "DATABASE_URL=postgres://admin:hunter2@db.internal:5432/prod",
+    );
+    expect(out).not.toContain("hunter2");
+    expect(out).not.toContain("admin:");
+    expect(out).toContain("postgres://<REDACTED>@db.internal");
+  });
+
+  it("redacts PEM / OpenSSH private key blocks wholesale", () => {
+    const pem = `-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxx
+-----END RSA PRIVATE KEY-----`;
+    const out = redactSensitive(`found here:\n${pem}\nend`);
+    expect(out).not.toContain("MIIEowIBAAKCAQEA");
+    expect(out).toContain("<REDACTED:private-key-block>");
+  });
+
+  it("redacts OpenSSH private key blocks", () => {
+    const block = `-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ
+-----END OPENSSH PRIVATE KEY-----`;
+    const out = redactSensitive(block);
+    expect(out).not.toContain("b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ");
+  });
 });

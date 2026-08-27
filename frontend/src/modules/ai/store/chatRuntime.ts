@@ -132,6 +132,16 @@ export async function sendMessage(text: string): Promise<boolean> {
   const state = useChatStore.getState();
   const sessionId = state.activeSessionId;
   if (!sessionId) return false;
+  // Guard against sending while a run is in-flight. The AI SDK would start a
+  // second transport run and abort/interleave the active stream — which is
+  // exactly what happens when a managed-agent review fires mid-conversation.
+  if (
+    state.agentMeta.status === "thinking" ||
+    state.agentMeta.status === "streaming" ||
+    state.agentMeta.status === "awaiting-approval"
+  ) {
+    return false;
+  }
   if (
     providerNeedsKey(getModel(state.selectedModelId as ModelId).provider) &&
     !getActiveProviderKey()

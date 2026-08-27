@@ -94,6 +94,20 @@ async function proxyFetchImpl(
     };
     signal?.addEventListener("abort", onAbort, { once: true });
 
+    // Once the stream settles, drop the abort listener so a long-lived/reused
+    // AbortSignal doesn't accumulate one listener per request, and detach the
+    // channel so no further backend events are processed.
+    const cleanup = () => {
+      if (signal) {
+        try {
+          signal.removeEventListener("abort", onAbort);
+        } catch {
+          /* ignore */
+        }
+      }
+      channel.onmessage = null;
+    };
+
     const channel = new Channel<AiStreamEvent>();
     channel.onmessage = (event) => {
       if (cancelled) return;
@@ -138,10 +152,12 @@ async function proxyFetchImpl(
           break;
         }
         case "end": {
+          cleanup();
           streamController?.close();
           break;
         }
         case "error": {
+          cleanup();
           if (!resolved) {
             reject(new Error(event.message));
           } else {
@@ -160,6 +176,7 @@ async function proxyFetchImpl(
       allowPrivateNetwork,
       onEvent: channel,
     }).catch((e) => {
+      cleanup();
       if (resolved) return; // headers already arrived; chunk-side error wins
       reject(e instanceof Error ? e : new Error(String(e)));
     });

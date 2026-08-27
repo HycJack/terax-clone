@@ -3,6 +3,8 @@ import { z } from "zod";
 import { runSubagent } from "../agents/runSubagent";
 import { SUBAGENTS, type SubagentType } from "../agents/registry";
 import { useChatStore } from "../store/chatStore";
+import { usePreferencesStore } from "@/modules/settings/preferences";
+import type { LocalProviderConfig } from "../lib/agent";
 import type { ToolContext } from "./context";
 
 const TYPE_KEYS = Object.keys(SUBAGENTS) as [SubagentType, ...SubagentType[]];
@@ -28,9 +30,25 @@ Auto-executes (no approval) — subagents are read-only by design.`,
           .optional()
           .describe("Short label shown in the chat UI for the spawn card."),
       }),
-      execute: async ({ type, prompt, description }) => {
-        const { apiKeys, selectedModelId, patchAgentMeta } =
+      execute: async ({ type, prompt, description }, options) => {
+        const { apiKeys, selectedModelId, patchAgentMeta, customEndpointKeys } =
           useChatStore.getState();
+        // Forward the full local-provider configuration so subagents use the
+        // same base URLs / model ids / custom endpoints as the main agent.
+        const p = usePreferencesStore.getState();
+        const local: LocalProviderConfig = {
+          lmstudioBaseURL: p.lmstudioBaseURL,
+          lmstudioModelId: p.lmstudioModelId,
+          mlxBaseURL: p.mlxBaseURL,
+          mlxModelId: p.mlxModelId,
+          ollamaBaseURL: p.ollamaBaseURL,
+          ollamaModelId: p.ollamaModelId,
+          openaiCompatibleBaseURL: p.openaiCompatibleBaseURL,
+          openaiCompatibleModelId: p.openaiCompatibleModelId,
+          openrouterModelId: p.openrouterModelId,
+          customEndpoints: p.customEndpoints,
+          customEndpointKeys,
+        };
         try {
           const r = await runSubagent({
             type,
@@ -38,6 +56,8 @@ Auto-executes (no approval) — subagents are read-only by design.`,
             keys: apiKeys,
             modelId: selectedModelId,
             toolContext: ctx,
+            local,
+            abortSignal: options?.abortSignal,
             onStep: (label) => patchAgentMeta({ step: label }),
           });
           return {

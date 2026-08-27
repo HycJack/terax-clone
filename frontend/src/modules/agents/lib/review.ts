@@ -26,6 +26,17 @@ function canReview(m: ManagedAgent): boolean {
 
 function fireReview(m: ManagedAgent): void {
   const store = useManagedAgentsStore.getState();
+  const meta = useChatStore.getState().agentMeta;
+  // If a run is in-flight, injecting a review now would abort/interleave the
+  // user's active stream — defer instead of sending.
+  if (
+    meta.status === "thinking" ||
+    meta.status === "streaming" ||
+    meta.status === "awaiting-approval"
+  ) {
+    store.setPendingReview(m.leafId, true);
+    return;
+  }
   store.markReviewed(m.leafId);
   store.setPhase(m.leafId, "reviewing");
   void (async () => {
