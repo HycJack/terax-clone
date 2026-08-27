@@ -703,36 +703,36 @@ export function useTabs(initial?: Partial<TerminalTab>) {
       approvalId: string;
       isNewFile: boolean;
     }) => {
-      let targetId: number | null = null;
-      setTabs((curr) => {
-        const existing = curr.find(
-          (t) => t.kind === "ai-diff" && t.approvalId === input.approvalId,
-        );
-        if (existing) {
-          targetId = existing.id;
-          return curr;
-        }
-        const id = nextIdRef.current++;
-        targetId = id;
-        const title = `${basename(input.path)} (AI diff)`;
-        return [
-          ...curr,
-          {
-            id,
-            kind: "ai-diff",
-            spaceId: activeSpaceIdRef.current,
-            title,
-            path: input.path,
-            originalContent: input.originalContent,
-            proposedContent: input.proposedContent,
-            approvalId: input.approvalId,
-            status: "pending",
-            isNewFile: input.isNewFile,
-          },
-        ];
-      });
-      if (targetId !== null) setActiveId(targetId);
-      return targetId as number | null;
+      // Compute the target id eagerly from the committed tab list — reading it
+      // back from the setTabs updater doesn't work under React 18 concurrent
+      // batching (the updater runs later, so the captured id is still null on
+      // return). Same rationale as openFileTab.
+      const curr = tabsRef.current;
+      const existing = curr.find(
+        (t) => t.kind === "ai-diff" && t.approvalId === input.approvalId,
+      );
+      if (existing) {
+        setActiveId(existing.id);
+        return existing.id;
+      }
+      const id = nextIdRef.current++;
+      setTabs((prev) => [
+        ...prev,
+        {
+          id,
+          kind: "ai-diff",
+          spaceId: activeSpaceIdRef.current,
+          title: `${basename(input.path)} (AI diff)`,
+          path: input.path,
+          originalContent: input.originalContent,
+          proposedContent: input.proposedContent,
+          approvalId: input.approvalId,
+          status: "pending",
+          isNewFile: input.isNewFile,
+        } satisfies AiDiffTab,
+      ]);
+      setActiveId(id);
+      return id;
     },
     [],
   );
@@ -787,57 +787,51 @@ export function useTabs(initial?: Partial<TerminalTab>) {
   }, []);
 
   const newMarkdownTab = useCallback((path: string) => {
-    let targetId: number | null = null;
-    setTabs((curr) => {
-      const existing = curr.find(
-        (t) => t.kind === "markdown" && t.path === path,
-      );
-      if (existing) {
-        targetId = existing.id;
-        return curr;
-      }
-      const id = nextIdRef.current++;
-      targetId = id;
-      return [
-        ...curr,
-        {
-          id,
-          kind: "markdown",
-          spaceId: activeSpaceIdRef.current,
-          title: basename(path),
-          path,
-        },
-      ];
-    });
-    if (targetId !== null) setActiveId(targetId);
-    return targetId;
+    // Eager id computation — see openFileTab for why we read tabsRef, not the
+    // setTabs updater.
+    const curr = tabsRef.current;
+    const existing = curr.find((t) => t.kind === "markdown" && t.path === path);
+    if (existing) {
+      setActiveId(existing.id);
+      return existing.id;
+    }
+    const id = nextIdRef.current++;
+    setTabs((prev) => [
+      ...prev,
+      {
+        id,
+        kind: "markdown",
+        spaceId: activeSpaceIdRef.current,
+        title: basename(path),
+        path,
+      } satisfies MarkdownTab,
+    ]);
+    setActiveId(id);
+    return id;
   }, []);
 
   const newViewerTab = useCallback((path: string) => {
-    let targetId: number | null = null;
-    setTabs((curr) => {
-      const existing = curr.find(
-        (t) => t.kind === "viewer" && t.path === path,
-      );
-      if (existing) {
-        targetId = existing.id;
-        return curr;
-      }
-      const id = nextIdRef.current++;
-      targetId = id;
-      return [
-        ...curr,
-        {
-          id,
-          kind: "viewer",
-          spaceId: activeSpaceIdRef.current,
-          title: basename(path),
-          path,
-        },
-      ];
-    });
-    if (targetId !== null) setActiveId(targetId);
-    return targetId;
+    // Eager id computation — see openFileTab for why we read tabsRef, not the
+    // setTabs updater.
+    const curr = tabsRef.current;
+    const existing = curr.find((t) => t.kind === "viewer" && t.path === path);
+    if (existing) {
+      setActiveId(existing.id);
+      return existing.id;
+    }
+    const id = nextIdRef.current++;
+    setTabs((prev) => [
+      ...prev,
+      {
+        id,
+        kind: "viewer",
+        spaceId: activeSpaceIdRef.current,
+        title: basename(path),
+        path,
+      } satisfies ViewerTab,
+    ]);
+    setActiveId(id);
+    return id;
   }, []);
 
   const setOverrideLanguage = useCallback((id: number, lang: string | null) => {
