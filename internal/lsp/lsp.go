@@ -61,8 +61,8 @@ func Spawn(ctx context.Context, m *Manager, args types.LspSpawnArgs) (*Session, 
 	if err != nil {
 		return nil, err
 	}
-	var stderrBuf cappedBuffer
-	cmd.Stderr = &stderrBuf
+	var stderrBuf = newCappedBuffer(64 * 1024)
+	cmd.Stderr = stderrBuf
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func Spawn(ctx context.Context, m *Manager, args types.LspSpawnArgs) (*Session, 
 	// header framing and emit each body as an event.
 	go sess.read(ctx, stdout)
 	// Wait goroutine: emits the exit info once the child terminates.
-	go sess.wait(ctx, &stderrBuf)
+	go sess.wait(ctx, stderrBuf)
 
 	return sess, nil
 }
@@ -310,11 +310,16 @@ func lookPath(command string) (string, error) {
 	return "", fmt.Errorf("lsp: %q not found on PATH", command)
 }
 
-// cappedBuffer collects up to 64 KiB of stderr for the LspExitInfo payload.
+// cappedBuffer collects up to `max` bytes of stderr, keeping only the tail
+// once it fills up. The tail is what the frontend shows on LSP exit.
 type cappedBuffer struct {
 	mu  sync.Mutex
 	buf []byte
 	max int
+}
+
+func newCappedBuffer(max int) *cappedBuffer {
+	return &cappedBuffer{max: max}
 }
 
 func (b *cappedBuffer) Write(p []byte) (int, error) {
