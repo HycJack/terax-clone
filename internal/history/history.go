@@ -184,18 +184,37 @@ func Commands(args CommandsArgs) ([]string, error) {
 	return out, nil
 }
 
+// persist writes the history atomically: a full rewrite to a temp file in the
+// same directory, fsync, then rename. A crash mid-write can no longer leave a
+// truncated/corrupt history file (the old content survives until the rename).
 func persist() error {
-	f, err := os.Create(file)
+	tmp := file + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	cleanup := func() {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+	}
 	w := bufio.NewWriter(f)
 	for _, c := range cache {
 		_, _ = w.WriteString(c)
 		_ = w.WriteByte('\n')
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, file)
 }
 
 func defaultDir() string {
