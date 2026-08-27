@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Tab } from "@/modules/tabs";
 import { isSerializableTab, serializeTabs } from "./serialize";
-import { saveState } from "./store";
+import { flushPersist, saveState } from "./store";
 import { useSpaces } from "./useSpaces";
 
 const DEBOUNCE_MS = 3000;
@@ -85,10 +85,16 @@ export function useSpacePersistence({
 
   useEffect(() => {
     if (!enabled) return;
-    const onHidden = () => {
-      if (document.visibilityState === "hidden") flush(latest.current);
+    // On quit / window-hide the debounced store flush (500ms) may never fire,
+    // dropping the last tab layout. Force an immediate persist here.
+    const flushImmediate = () => {
+      flush(latest.current);
+      void flushPersist();
     };
-    const onLeave = () => flush(latest.current);
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") flushImmediate();
+    };
+    const onLeave = () => flushImmediate();
     document.addEventListener("visibilitychange", onHidden);
     window.addEventListener("blur", onLeave);
     window.addEventListener("beforeunload", onLeave);
@@ -96,7 +102,7 @@ export function useSpacePersistence({
       document.removeEventListener("visibilitychange", onHidden);
       window.removeEventListener("blur", onLeave);
       window.removeEventListener("beforeunload", onLeave);
-      flush(latest.current);
+      flushImmediate();
     };
   }, [enabled, flush]);
 }

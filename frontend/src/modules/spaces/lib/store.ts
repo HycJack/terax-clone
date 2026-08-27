@@ -59,6 +59,13 @@ export async function saveState(id: string, state: SpaceState): Promise<void> {
   await store.set(stateKey(id), state);
 }
 
+/** Force an immediate (non-debounced) persist of the spaces store. Call on
+ *  quit / window-hide paths — the 500ms autoSave timer may never fire if the
+ *  webview is torn down first, dropping the final tab layout. */
+export function flushPersist(): Promise<void> {
+  return store.save();
+}
+
 export async function deleteSpaceData(id: string): Promise<void> {
   await store.delete(stateKey(id));
 }

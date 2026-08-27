@@ -31,28 +31,45 @@ export function MarkdownPreviewPane({ path, visible, onSetView }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setStatus({ kind: "loading" });
-    invoke<ReadResult>("fs_read_file", {
-      path,
-      workspace: currentWorkspaceEnv(),
-    })
-      .then((res) => {
-        if (cancelled) return;
-        if (res.kind === "text") {
-          setStatus({ kind: "ready", content: res.content });
-        } else if (res.kind === "binary") {
-          setStatus({ kind: "binary" });
-        } else {
-          setStatus({ kind: "toolarge", size: res.size, limit: res.limit });
-        }
+    const load = () => {
+      invoke<ReadResult>("fs_read_file", {
+        path,
+        workspace: currentWorkspaceEnv(),
       })
-      .catch((e) => {
-        if (!cancelled) setStatus({ kind: "error", message: String(e) });
-      });
-    return () => {
+        .then((res) => {
+          if (cancelled) return;
+          if (res.kind === "text") {
+            // Only re-render when the content actually changed — the poll
+            // below fires every second while visible.
+            setStatus((prev) =>
+              prev.kind === "ready" && prev.content === res.content
+                ? prev
+                : { kind: "ready", content: res.content },
+            );
+          } else if (res.kind === "binary") {
+            setStatus({ kind: "binary" });
+          } else {
+            setStatus({ kind: "toolarge", size: res.size, limit: res.limit });
+          }
+        })
+        .catch((e) => {
+          if (!cancelled) setStatus({ kind: "error", message: String(e) });
+        });
+    };
+    // Immediate load on open (and again when the tab becomes visible, so
+    // edits made while it was hidden show up).
+    load();
+    if (!visible) return () => {
       cancelled = true;
     };
-  }, [path]);
+    // Poll while visible: the editor writes to the same file, and the
+    // rendered view should follow without re-opening the tab.
+    const timer = setInterval(load, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [path, visible]);
 
   return (
     <div
