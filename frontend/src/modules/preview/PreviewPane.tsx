@@ -104,12 +104,19 @@ export const PreviewPane = forwardRef<PreviewPaneHandle, Props>(
                 title="Preview"
                 className="h-full w-full border-0"
                 // sandbox grants the bare minimum for a dev preview: scripts,
-                // same-origin (cookies/storage for the previewed app), forms,
-                // popups for "open in new tab". Critically OMITS
-                // `allow-top-navigation*` — without it the iframe cannot
-                // navigate the parent Tauri webview to an attacker origin,
-                // which would otherwise expose `window.__TAURI__` IPC.
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
+                // forms, popups for "open in new tab", downloads. Critically
+                // OMITS `allow-top-navigation*` — without it the iframe cannot
+                // navigate the parent webview to an attacker origin.
+                //
+                // `allow-same-origin` is granted ONLY to non-`/local-file/`
+                // URLs (external dev servers), which are cross-origin with
+                // the app and need their own origin for cookies/storage.
+                // Local files are served from the app's own origin, so
+                // granting `allow-same-origin` there would let a previewed
+                // (possibly malicious) local HTML file reach
+                // `window.parent.go` — the full Wails IPC. Dropping it gives
+                // the frame an opaque origin instead.
+                sandbox={sandboxFor(url)}
                 referrerPolicy="no-referrer"
                 allow="clipboard-read; clipboard-write; fullscreen"
               />
@@ -180,17 +187,28 @@ function EmptyState() {
 }
 
 function isLocalUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    const h = u.hostname;
-    return (
-      h === "localhost" ||
-      h === "127.0.0.1" ||
-      h === "0.0.0.0" ||
-      h === "[::1]" ||
-      h.endsWith(".localhost")
-    );
-  } catch {
-    return false;
-  }
+	try {
+		const u = new URL(url);
+		const h = u.hostname;
+		return (
+			h === "localhost" ||
+			h === "127.0.0.1" ||
+			h === "0.0.0.0" ||
+			h === "[::1]" ||
+			h.endsWith(".localhost")
+		);
+	} catch {
+		return false;
+	}
+}
+
+// Computes the iframe sandbox attribute. `/local-file/` URLs are served from
+// the app's own asset-server origin, so `allow-same-origin` is deliberately
+// omitted to force an opaque origin (see the JSX comment above). Everything
+// else (external sites / local dev servers) is cross-origin with the app and
+// keeps `allow-same-origin` so the previewed app can use cookies/storage.
+function sandboxFor(url: string): string {
+	const base = "allow-scripts allow-forms allow-popups allow-downloads";
+	if (url.startsWith("/local-file/")) return base;
+	return `${base} allow-same-origin allow-popups-to-escape-sandbox`;
 }
