@@ -11,10 +11,8 @@ import (
 )
 
 var (
-	mu      sync.Mutex
-	dir     string
-	dirty   = map[string]bool{}
-	pending = map[string][]byte{}
+	mu  sync.Mutex
+	dir string
 )
 
 // LoadArgs is the request body for Load.

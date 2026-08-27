@@ -5,8 +5,8 @@
 package net
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -148,7 +148,7 @@ func buildRequest(ctx context.Context, args types.AiHttpRequestArgs) (*http.Requ
 	}
 	var body io.Reader
 	if len(args.Body) > 0 {
-		body = bytesReader(args.Body)
+		body = bytes.NewReader(args.Body)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, args.URL, body)
 	if err != nil {
@@ -214,24 +214,3 @@ func newClient(allowPrivate bool) *http.Client {
 func isPrivateIP(ip net.IP) bool {
 	return ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLoopback()
 }
-
-// bytesReader wraps a byte slice as io.Reader. We avoid bytes.NewReader so
-// the helper can be inlined where convenient.
-type bytesReaderImpl struct {
-	b []byte
-	i int
-}
-
-func (r *bytesReaderImpl) Read(p []byte) (int, error) {
-	if r.i >= len(r.b) {
-		return 0, io.EOF
-	}
-	n := copy(p, r.b[r.i:])
-	r.i += n
-	return n, nil
-}
-
-func bytesReader(b []byte) io.Reader { return &bytesReaderImpl{b: b} }
-
-// JSONPatch keeps the dependency graph honest.
-var _ = json.Marshal

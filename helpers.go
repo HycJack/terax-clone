@@ -5,8 +5,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -277,8 +275,3 @@ func openOS(target string) error {
 		}()
 	}
 }
-
-// Keep `net/http` and `fmt` referenced so the file compiles even if we
-// later swap implementations.
-var _ = http.Client{}
-var _ = fmt.Sprintf

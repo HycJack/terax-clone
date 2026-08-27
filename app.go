@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 
 	"terax/internal/agent"
 	"terax/internal/events"
@@ -1144,18 +1143,3 @@ func (a *App) AppHomeDir() string {
 	}
 	return ""
 }
-
-// =====================================================================
-// Tiny helpers — keep these inline so the `App` methods stay readable.
-// =====================================================================
-
-// Stringify a numeric id (currently unused but exposed for symmetry).
-func intStr(n int) string { return strconv.Itoa(n) }
-
-// Ensure unique compile-time symbol so the package compiles even when
-// every binding isn't exercised yet.
-var _ = shellEmptyPty
-
-// shellEmptyPty is a no-op used to keep the imports balanced while we wire
-// up the streaming commands in follow-up commits.
-func shellEmptyPty() *internalshell.Session { return nil }
