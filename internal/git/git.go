@@ -59,7 +59,10 @@ func ResolveRepo(ctx context.Context, cwd string) (*types.GitRepoInfo, error) {
 	if err == nil {
 		for _, p := range strings.Split(headerOut, "\x00") {
 			if strings.HasPrefix(p, "## ") {
-				info.Branch, info.Upstream, info.IsDetached = parseBranchHeader(p[3:])
+				bh := parseBranchHeader(p[3:])
+				info.Branch = bh.branch
+				info.Upstream = bh.upstream
+				info.IsDetached = bh.detached
 				break
 			}
 		}
@@ -67,25 +70,58 @@ func ResolveRepo(ctx context.Context, cwd string) (*types.GitRepoInfo, error) {
 	return info, nil
 }
 
-func parseBranchHeader(header string) (branch string, upstream *string, detached bool) {
+// branchHeaderInfo is the parsed `## <branch>...<upstream> [ahead N, behind M]`
+// branch-status header. `ahead`/`behind` are the commit counts relative to
+// the upstream, not the number of staged/unstaged files.
+type branchHeaderInfo struct {
+	branch   string
+	upstream *string
+	ahead    int
+	behind   int
+	detached bool
+}
+
+func parseBranchHeader(header string) branchHeaderInfo {
+	var info branchHeaderInfo
 	if idx := strings.Index(header, "..."); idx >= 0 {
-		branch = header[:idx]
+		info.branch = header[:idx]
 		rest := header[idx+3:]
-		braceIdx := strings.Index(rest, " [")
-		if braceIdx < 0 {
-			upstream = &rest
-		} else {
+		if braceIdx := strings.Index(rest, " ["); braceIdx >= 0 {
 			u := rest[:braceIdx]
-			upstream = &u
+			info.upstream = &u
+			info.ahead, info.behind = parseAheadBehind(rest[braceIdx+1:])
+		} else {
+			info.upstream = &rest
 		}
-		return branch, upstream, false
+		return info
 	}
-	if strings.Contains(header, "(detached at ") {
-		start := strings.Index(header, "(detached at ")
-		branch = header[:start-1]
-		return branch, nil, true
+	if start := strings.Index(header, "(detached at "); start >= 0 {
+		info.branch = header[:start-1]
+		info.detached = true
+		return info
 	}
-	return header, nil, false
+	info.branch = header
+	return info
+}
+
+// parseAheadBehind extracts the `[ahead N, behind M]` commit counts from the
+// branch-status header tail (both fields are optional and comma-separated).
+// `[gone]` (upstream deleted) yields zero counts.
+func parseAheadBehind(s string) (ahead, behind int) {
+	inside := strings.Trim(s, "[]")
+	if inside == "" || inside == "gone" {
+		return 0, 0
+	}
+	for _, part := range strings.Split(inside, ",") {
+		part = strings.TrimSpace(part)
+		switch {
+		case strings.HasPrefix(part, "ahead "):
+			ahead, _ = strconv.Atoi(strings.TrimSpace(part[len("ahead "):]))
+		case strings.HasPrefix(part, "behind "):
+			behind, _ = strconv.Atoi(strings.TrimSpace(part[len("behind "):]))
+		}
+	}
+	return ahead, behind
 }
 
 // PanelSnapshot returns the wrapped `{repo, status}` snapshot. Either field
@@ -124,10 +160,12 @@ func Status(ctx context.Context, repo string) (types.GitStatusSnapshot, error) {
 	for i := 0; i < len(parts); i++ {
 		p := parts[i]
 		if strings.HasPrefix(p, "## ") {
-			branch, upstream, detached := parseBranchHeader(p[3:])
-			snap.Branch = branch
-			snap.Upstream = upstream
-			snap.IsDetached = detached
+			bh := parseBranchHeader(p[3:])
+			snap.Branch = bh.branch
+			snap.Upstream = bh.upstream
+			snap.IsDetached = bh.detached
+			snap.Ahead = bh.ahead
+			snap.Behind = bh.behind
 			continue
 		}
 		if len(p) < 3 {
@@ -182,12 +220,6 @@ func Status(ctx context.Context, repo string) (types.GitStatusSnapshot, error) {
 		}
 		_ = status
 		snap.ChangedFiles = append(snap.ChangedFiles, cf)
-		if staged {
-			snap.Ahead++
-		}
-		if unstaged {
-			snap.Behind++
-		}
 	}
 	return snap, nil
 }
@@ -362,8 +394,8 @@ func Push(ctx context.Context, repo string) (types.GitPushResult, error) {
 	if statusOut, err := run(ctx, repo, "status", "--porcelain=v1", "-z", "--branch"); err == nil {
 		for _, p := range strings.Split(statusOut, "\x00") {
 			if strings.HasPrefix(p, "## ") {
-				b, _, _ := parseBranchHeader(p[3:])
-				res.Branch = &b
+				bh := parseBranchHeader(p[3:])
+				res.Branch = &bh.branch
 				break
 			}
 		}

@@ -47,6 +47,45 @@ func TestStatusParsesPathsWithoutLeadingSpace(t *testing.T) {
 	}
 }
 
+func TestParseAheadBehind(t *testing.T) {
+	cases := []struct {
+		header         string
+		branch         string
+		upstream       string
+		ahead, behind  int
+		detached       bool
+	}{
+		{header: "main...origin/main [ahead 1, behind 2]", branch: "main", upstream: "origin/main", ahead: 1, behind: 2},
+		{header: "main...origin/main [ahead 3]", branch: "main", upstream: "origin/main", ahead: 3, behind: 0},
+		{header: "main...origin/main [behind 4]", branch: "main", upstream: "origin/main", ahead: 0, behind: 4},
+		{header: "main...origin/main [gone]", branch: "main", upstream: "origin/main", ahead: 0, behind: 0},
+		{header: "main...origin/main", branch: "main", upstream: "origin/main", ahead: 0, behind: 0},
+		{header: "main", branch: "main", ahead: 0, behind: 0},
+		{header: "HEAD (detached at abc1234)", branch: "HEAD", detached: true},
+	}
+
+	for _, c := range cases {
+		got := parseBranchHeader(c.header)
+		if got.branch != c.branch {
+			t.Errorf("parseBranchHeader(%q).branch = %q, want %q", c.header, got.branch, c.branch)
+		}
+		if got.ahead != c.ahead || got.behind != c.behind {
+			t.Errorf("parseBranchHeader(%q) ahead/behind = %d/%d, want %d/%d",
+				c.header, got.ahead, got.behind, c.ahead, c.behind)
+		}
+		if got.detached != c.detached {
+			t.Errorf("parseBranchHeader(%q).detached = %v, want %v", c.header, got.detached, c.detached)
+		}
+		upstream := ""
+		if got.upstream != nil {
+			upstream = *got.upstream
+		}
+		if upstream != c.upstream {
+			t.Errorf("parseBranchHeader(%q).upstream = %q, want %q", c.header, upstream, c.upstream)
+		}
+	}
+}
+
 func TestStatusParsesRenames(t *testing.T) {
 	repo := t.TempDir()
 	runGit(t, repo, "init", "-q")
