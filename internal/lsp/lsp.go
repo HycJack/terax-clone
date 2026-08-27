@@ -6,7 +6,6 @@ package lsp
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -180,6 +179,10 @@ func ResolveRoot(path string, markers []string) string {
 }
 
 func (s *Session) read(ctx context.Context, r io.Reader) {
+	// LSP headers are case-insensitive per the spec (RFC 9110 / LSP), so match
+	// on the lowercased name. Guard the declared body size: a misbehaving or
+	// hostile server could otherwise ask us to allocate an unbounded buffer.
+	const maxBodyBytes = 32 * 1024 * 1024 // 32 MB — far above any real LSP message
 	br := bufio.NewReader(r)
 	for {
 		// Read headers.
@@ -193,13 +196,25 @@ func (s *Session) read(ctx context.Context, r io.Reader) {
 			if line == "" {
 				break
 			}
-			if strings.HasPrefix(line, "Content-Length: ") {
-				n, _ := strconv.Atoi(strings.TrimPrefix(line, "Content-Length: "))
-				contentLength = n
+			header := line
+			idx := -1
+			if i := strings.IndexByte(line, ':'); i >= 0 {
+				header = line[:i]
+				idx = i
+			}
+			if strings.EqualFold(strings.TrimSpace(header), "Content-Length") && idx >= 0 {
+				value := strings.TrimSpace(line[idx+1:])
+				if n, err := strconv.Atoi(value); err == nil && n > 0 {
+					contentLength = n
+				}
 			}
 		}
 		if contentLength <= 0 {
 			continue
+		}
+		if contentLength > maxBodyBytes {
+			// Give up on the connection rather than allocating an absurd buffer.
+			return
 		}
 		body := make([]byte, contentLength)
 		if _, err := io.ReadFull(br, body); err != nil {
@@ -360,6 +375,3 @@ func defaultEnv() []string                                 { return envImpl() }
 func defaultGetpid() int                                   { return pidImpl() }
 func defaultGetenv(key string) string                      { return os.Getenv(key) }
 func defaultHomeDir() (string, error)                      { return os.UserHomeDir() }
-
-// EncodeError is unused (frontend does its own JSON) but kept for symmetry.
-var _ = json.Marshal
