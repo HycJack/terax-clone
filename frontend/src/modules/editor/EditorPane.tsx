@@ -29,6 +29,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -265,9 +266,17 @@ export const EditorPane = memo(
       pendingLineRef.current = null;
     }, []);
 
-    useEffect(() => {
-      if (doc.status === "ready") applyPendingGoto();
-    }, [doc.status, applyPendingGoto]);
+    // CodeMirror's view is created in a passive effect and only exposed on
+    // the ref in a later commit, so a `doc.status`-keyed effect alone can
+    // miss the window where the view becomes available (cursor then stays at
+    // the top). Re-check on every commit: cheap (pendingLineRef is usually
+    // null) and covers both "doc ready first" and "view ready first".
+    useLayoutEffect(() => {
+      if (pendingLineRef.current == null) return;
+      if (statusRef.current !== "ready") return;
+      if (!cmRef.current?.view) return;
+      applyPendingGoto();
+    });
 
     const extensions = useMemo(
       () => [

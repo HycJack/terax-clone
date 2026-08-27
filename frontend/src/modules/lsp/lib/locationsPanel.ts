@@ -78,6 +78,7 @@ class LocationPicker {
       li.textContent = item.label;
       li.addEventListener("mousedown", (e) => {
         e.preventDefault();
+        e.stopPropagation();
         this.pick(view, i);
       });
       this.list.appendChild(li);
@@ -147,7 +148,9 @@ export const locationsPanel = [
   ViewPlugin.fromClass(LocationPicker, {
     eventHandlers: {
       keydown(e, view) {
-        this.onKeydown(view, e);
+        // Return true only when the picker handled the key, so handled keys
+        // stop propagation and never also move the editor cursor.
+        return this.onKeydown(view, e);
       },
     },
   }),

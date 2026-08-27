@@ -599,78 +599,84 @@ export function useTabs(initial?: Partial<TerminalTab>) {
    *   otherwise the current preview slot is replaced with the new path.
    */
   const openFileTab = useCallback((path: string, pin = true) => {
-    let targetId: number | null = null;
-    setTabs((curr) => {
-      if (pin) {
-        // Persistent open: find any existing editor tab, pin it if needed.
-        const existing = curr.find(
-          (t) => t.kind === "editor" && t.path === path,
-        );
-        if (existing) {
-          targetId = existing.id;
-          if ((existing as EditorTab).preview) {
-            return curr.map((t) =>
+    // Compute the target id eagerly from the committed tab list: reading it
+    // back from the setTabs updater doesn't work under React 18 concurrent
+    // batching (the updater runs later, so the captured id is still null on
+    // return), which broke callers that rely on the return value, e.g. the
+    // LSP cross-file goto line.
+    const curr = tabsRef.current;
+    if (pin) {
+      // Persistent open: find any existing editor tab, pin it if needed.
+      const existing = curr.find(
+        (t) => t.kind === "editor" && t.path === path,
+      );
+      if (existing) {
+        if ((existing as EditorTab).preview) {
+          setTabs((prev) =>
+            prev.map((t) =>
               t.id === existing.id ? { ...t, preview: false } : t,
-            );
-          }
-          return curr;
+            ),
+          );
         }
-        const id = nextIdRef.current++;
-        targetId = id;
-        return [
-          ...curr,
-          {
-            id,
-            kind: "editor",
-            spaceId: activeSpaceIdRef.current,
-            title: basename(path),
-            path,
-            dirty: false,
-            preview: false,
-          } satisfies EditorTab,
-        ];
-      } else {
-        // Preview open: persistent tab for this path takes priority.
-        const persistent = curr.find(
-          (t) =>
-            t.kind === "editor" && t.path === path && !(t as EditorTab).preview,
-        );
-        if (persistent) {
-          targetId = persistent.id;
-          return curr;
-        }
-        // Reuse the slot if it already shows the same path.
-        const existingPreview = curr.find(
-          (t) =>
-            t.kind === "editor" && t.path === path && (t as EditorTab).preview,
-        );
-        if (existingPreview) {
-          targetId = existingPreview.id;
-          return curr;
-        }
-        // Replace the current preview slot, or append a new one.
-        const previewIdx = curr.findIndex(
-          (t) => t.kind === "editor" && (t as EditorTab).preview,
-        );
-        const id = nextIdRef.current++;
-        targetId = id;
-        const tab: EditorTab = {
+        setActiveId(existing.id);
+        return existing.id;
+      }
+      const id = nextIdRef.current++;
+      setTabs((prev) => [
+        ...prev,
+        {
           id,
           kind: "editor",
           spaceId: activeSpaceIdRef.current,
           title: basename(path),
           path,
           dirty: false,
-          preview: true,
-        };
-        if (previewIdx === -1) return [...curr, tab];
-        const next = [...curr];
-        next[previewIdx] = tab;
-        return next;
-      }
+          preview: false,
+        } satisfies EditorTab,
+      ]);
+      setActiveId(id);
+      return id;
+    }
+    // Preview open: persistent tab for this path takes priority.
+    const persistent = curr.find(
+      (t) =>
+        t.kind === "editor" && t.path === path && !(t as EditorTab).preview,
+    );
+    if (persistent) {
+      setActiveId(persistent.id);
+      return persistent.id;
+    }
+    // Reuse the slot if it already shows the same path.
+    const existingPreview = curr.find(
+      (t) =>
+        t.kind === "editor" && t.path === path && (t as EditorTab).preview,
+    );
+    if (existingPreview) {
+      setActiveId(existingPreview.id);
+      return existingPreview.id;
+    }
+    // Replace the current preview slot, or append a new one.
+    const id = nextIdRef.current++;
+    const tab: EditorTab = {
+      id,
+      kind: "editor",
+      spaceId: activeSpaceIdRef.current,
+      title: basename(path),
+      path,
+      dirty: false,
+      preview: true,
+    };
+    setTabs((prev) => {
+      const previewIdx = prev.findIndex(
+        (t) => t.kind === "editor" && (t as EditorTab).preview,
+      );
+      if (previewIdx === -1) return [...prev, tab];
+      const next = [...prev];
+      next[previewIdx] = tab;
+      return next;
     });
-    if (targetId !== null) setActiveId(targetId);
-    return targetId as number | null;
+    setActiveId(id);
+    return id;
   }, []);
 
   /**
