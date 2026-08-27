@@ -10,6 +10,7 @@ import {
   type ProviderId,
 } from "../config";
 import { useTodosStore } from "./todoStore";
+import { closeSessionShells } from "../tools/shell";
 import type { AgentUsage } from "../lib/agent";
 import { EMPTY_PROVIDER_KEYS, type ProviderKeys, type CustomEndpointKeys } from "../lib/keyring";
 import {
@@ -175,6 +176,9 @@ export function touchChat(id: string, c: Chat<UIMessage>) {
     if (useChatStore.getState().activeSessionId === oldest) break;
     flushPersistEntry(oldest);
     void chats.get(oldest)?.stop();
+    // Reap the agent's per-session backend shell so it doesn't linger for
+    // the app's lifetime.
+    closeSessionShells(oldest);
     chats.delete(oldest);
   }
 }
@@ -359,6 +363,7 @@ export const useChatStore = create<StoreState>((set, get) => ({
     chats.get(id)?.stop();
     chats.delete(id);
     seedMessages.delete(id);
+    closeSessionShells(id);
     const pend = pendingPersist.get(id);
     if (pend) {
       clearTimeout(pend.timer);

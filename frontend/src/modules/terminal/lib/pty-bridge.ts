@@ -86,7 +86,27 @@ export async function openPty(
   // start the backend pump — Wails' event bus has no buffering, so any
   // output emitted before this subscription is silently dropped (this is
   // what made the shell banner/prompt disappear on startup).
-  await invoke("pty_start", { id });
+  try {
+    await invoke("pty_start", { id });
+  } catch (err) {
+    // Unsubscribe and tear down the backend PTY we already opened, otherwise
+    // this failure leaks the event listeners AND a live backend session
+    // (openPtyWithRetry would then compound the leak on each failed spawn).
+    try {
+      unsubData();
+      unsubExit();
+      EventsOff(dataEvent);
+      EventsOff(exitEvent);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await invoke("pty_close", { id });
+    } catch {
+      /* session may already be gone */
+    }
+    throw err;
+  }
 
   let closed = false;
   return {

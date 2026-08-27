@@ -31,6 +31,24 @@ function workspaceSessionKey(sessionId: string): string {
   return `${sessionId}:${workspaceScopeKey(currentWorkspaceEnv())}`;
 }
 
+/**
+ * Closes every backend shell session spawned for the given chat session.
+ * Call when the chat session is deleted or LRU-evicted so the backend's
+ * per-session process records don't accumulate for the app's lifetime.
+ */
+export function closeSessionShells(sessionId: string): void {
+  for (const [key, promise] of sessionShells) {
+    if (key.startsWith(`${sessionId}:`)) {
+      sessionShells.delete(key);
+      void promise
+        .then((id) => native.shellSessionClose(id))
+        .catch(() => {
+          /* session may already be gone */
+        });
+    }
+  }
+}
+
 export function buildShellTools(ctx: ToolContext) {
   return {
     bash_run: tool({
