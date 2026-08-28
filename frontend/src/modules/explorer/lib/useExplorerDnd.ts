@@ -12,6 +12,8 @@ type Options = {
   isDir: (path: string) => boolean | undefined;
   onMove: (from: string, toDir: string) => void;
   pathDropTarget?: ExplorerPathDropTarget;
+  /** Called when a file is dropped outside the explorer (e.g. onto the editor). */
+  onDropFile?: (path: string) => void;
 };
 
 const THRESHOLD = 5;
@@ -52,12 +54,15 @@ export function finishExplorerDrag(
   moveTarget: string | null,
   pathDropTarget: ExplorerPathDropTarget | undefined,
   onMove: (from: string, toDir: string) => void,
+  onDropFile?: (path: string) => void,
 ): void {
   const handledByPathTarget =
     commit &&
     (pathDropTarget?.dropPath(source, clientX, clientY) ?? false);
   if (commit && !handledByPathTarget && moveTarget) {
     onMove(source, moveTarget);
+  } else if (commit && !handledByPathTarget && !moveTarget && onDropFile) {
+    onDropFile(source);
   }
   pathDropTarget?.clearTarget();
 }
@@ -71,6 +76,7 @@ export function useExplorerDnd({
   isDir,
   onMove,
   pathDropTarget,
+  onDropFile,
 }: Options) {
   const [dragLabel, setDragLabel] = useState<string | null>(null);
   const [dropTargetDir, setDropTargetDir] = useState<string | null>(null);
@@ -80,8 +86,8 @@ export function useExplorerDnd({
   const dropTargetRef = useRef<string | null>(null);
   const suppressClickRef = useRef(false);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const optsRef = useRef({ rootPath, isDir, onMove, pathDropTarget });
-  optsRef.current = { rootPath, isDir, onMove, pathDropTarget };
+  const optsRef = useRef({ rootPath, isDir, onMove, pathDropTarget, onDropFile });
+  optsRef.current = { rootPath, isDir, onMove, pathDropTarget, onDropFile };
 
   const placeGhost = (x: number, y: number) => {
     lastPosRef.current = { x, y };
@@ -153,6 +159,7 @@ export function useExplorerDnd({
         dropTargetRef.current,
         optsRef.current.pathDropTarget,
         optsRef.current.onMove,
+        optsRef.current.onDropFile,
       );
       suppressClickRef.current = true;
       setTimeout(() => {

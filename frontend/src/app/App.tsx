@@ -1341,6 +1341,7 @@ export default function App() {
                         onPathDeleted={handlePathDeleted}
                         onRevealInTerminal={cdInNewTab}
                         onAttachToAgent={handleAttachFileToAgent}
+                        onDropFile={handleOpenFile}
                         pathDropTarget={terminalPathDropTarget}
                       />
                     ) : (

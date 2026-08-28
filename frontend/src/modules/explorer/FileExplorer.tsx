@@ -60,6 +60,8 @@ type Props = {
   onPathDeleted?: (path: string) => void;
   onRevealInTerminal?: (path: string) => void;
   onAttachToAgent?: (path: string) => void;
+  /** Called when a file is dragged out of the explorer and dropped elsewhere (e.g. editor). */
+  onDropFile?: (path: string) => void;
   pathDropTarget?: TerminalPathDropTarget;
   gitStatus?: GitStatusSnapshot | null;
 };
@@ -192,6 +194,7 @@ export const FileExplorer = memo(
       onPathDeleted,
       onRevealInTerminal,
       onAttachToAgent,
+      onDropFile,
       pathDropTarget,
       gitStatus,
     },
@@ -268,6 +271,7 @@ export const FileExplorer = memo(
       isDir: isDirAt,
       onMove: tree.movePath,
       pathDropTarget,
+      onDropFile,
     });
 
     const fileDrop = useExplorerFileDrop({
