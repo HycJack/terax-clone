@@ -24,7 +24,7 @@ import {
 } from "../config";
 import { buildTools, type ToolContext } from "../tools/tools";
 import { compactModelMessagesDetailed } from "./compact";
-import { isCriticalMode } from "./approval";
+import { isRelaxedMode, isTrustedMode } from "./approval";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
 import { prepareAgentPrompt } from "./prompt";
 import { createProxyFetch } from "./proxyFetch";
@@ -318,6 +318,10 @@ const APPROVAL_MODE_PROMPT = `## APPROVAL MODE — CRITICAL-ONLY
 File edits and writes INSIDE the current workspace (workspace_root) are AUTO-APPROVED and execute immediately — do not narrate them, do not ask "should I write this?", and do not echo the file content first; the change is already happening.
 You still MUST WAIT for the user's approval card before: bash_run, bash_background, spawn_coding_agent, send_to_agent, and any edit/write whose path resolves OUTSIDE the workspace_root. If you see an approval card, stop and wait for the user to accept or reject it before continuing.`;
 
+const TRUSTED_MODE_PROMPT = `## APPROVAL MODE — TRUSTED WORKSPACE
+The user has trusted this workspace: file edits/writes and shell commands (bash_run, bash_background) INSIDE the workspace are AUTO-APPROVED and execute immediately. Do not narrate them and do not ask "should I write this?" — the change is already happening. Chain actions freely until the task is done.
+You MUST STILL WAIT for the user's approval card before: spawn_coding_agent, send_to_agent, and any edit/write whose path resolves OUTSIDE the workspace_root. If you see an approval card, stop and wait for the user to accept or reject it before continuing.`;
+
 function buildStableSystem(
   modelId: string,
   persona: { name: string; instructions: string } | null,
@@ -408,7 +412,11 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.customInstructions,
     opts.projectMemory ?? null,
   );
-  const approvalNote = isCriticalMode() ? `\n\n${APPROVAL_MODE_PROMPT}` : "";
+  const approvalNote = isTrustedMode()
+    ? `\n\n${TRUSTED_MODE_PROMPT}`
+    : isRelaxedMode()
+      ? `\n\n${APPROVAL_MODE_PROMPT}`
+      : "";
 
   const history = await convertToModelMessages(opts.uiMessages);
   const keepsReasoning = modelKeepsReasoning(info);

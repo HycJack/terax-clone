@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { native } from "../lib/native";
 import { checkShellCommand } from "../lib/security";
+import { shellNeedsApproval } from "../lib/approval";
 import type { ToolContext } from "./context";
 import { currentWorkspaceEnv, workspaceScopeKey } from "@/modules/workspace";
 
@@ -53,12 +54,12 @@ export function buildShellTools(ctx: ToolContext) {
   return {
     bash_run: tool({
       description:
-        "Run a foreground shell command in this session's persistent agent shell. cwd persists across calls (so `cd foo` then `bash_run pwd` works). Use for short-lived commands (lint, test, search, build). For long-running or daemon processes (dev servers, watch tasks), use `bash_background`. NEVER invoke interactive tools (vim, less, top) — they will hang. Asks for user approval.",
+        "Run a foreground shell command in this session's persistent agent shell. cwd persists across calls (so `cd foo` then `bash_run pwd` works). Use for short-lived commands (lint, test, search, build). For long-running or daemon processes (dev servers, watch tasks), use `bash_background`. NEVER invoke interactive tools (vim, less, top) — they will hang. Approval depends on the approval mode: in \"trust this workspace\" mode commands auto-run, otherwise a confirmation card appears.",
       inputSchema: z.object({
         command: z.string(),
         timeout_secs: z.number().int().min(1).max(300).optional(),
       }),
-      needsApproval: true,
+      needsApproval: () => shellNeedsApproval(),
       execute: async ({ command, timeout_secs }) => {
         const safety = checkShellCommand(command);
         if (!safety.ok) return { error: safety.reason };
@@ -90,12 +91,12 @@ export function buildShellTools(ctx: ToolContext) {
 
     bash_background: tool({
       description:
-        "Spawn a long-running background process (e.g. `pnpm dev`, `cargo watch`, log tailers). Returns a handle; use `bash_logs` to read its output and `bash_kill` to stop it. Output is captured into a 4MB ring buffer. Asks for user approval.",
+        "Spawn a long-running background process (e.g. `pnpm dev`, `cargo watch`, log tailers). Returns a handle; use `bash_logs` to read its output and `bash_kill` to stop it. Output is captured into a 4MB ring buffer. Approval depends on the approval mode: \"trust this workspace\" auto-runs, otherwise a confirmation card appears.",
       inputSchema: z.object({
         command: z.string(),
         cwd: z.string().nullable().optional(),
       }),
-      needsApproval: true,
+      needsApproval: () => shellNeedsApproval(),
       execute: async ({ command, cwd }) => {
         const safety = checkShellCommand(command);
         if (!safety.ok) return { error: safety.reason };

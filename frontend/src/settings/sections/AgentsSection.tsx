@@ -540,15 +540,16 @@ function SnippetEditorDialog({
 
 function ApprovalModeBlock() {
   const mode = usePreferencesStore((s) => s.agentApprovalMode);
+  const descriptions: Record<AgentApprovalMode, string> = {
+    always:
+      "Every mutating tool (edit, write, shell, delegation) pauses for your approval.",
+    critical:
+      "File edits inside the current workspace run automatically; shell commands, background processes, agent delegation, and edits outside the workspace still ask.",
+    trusted:
+      "Hands-off inside the workspace: file edits AND shell commands auto-run. Only edits outside the workspace and delegating to other agents still ask.",
+  };
   return (
-    <SettingRow
-      title="Tool approval"
-      description={
-        mode === "critical"
-          ? "File edits inside the current workspace run automatically; shell commands, background processes, agent delegation, and edits outside the workspace still ask."
-          : "Every mutating tool (edit, write, shell, delegation) pauses for your approval."
-      }
-    >
+    <SettingRow title="Tool approval" description={descriptions[mode]}>
       <Select
         value={mode}
         onValueChange={(v) => void setAgentApprovalMode(v as AgentApprovalMode)}
@@ -559,6 +560,7 @@ function ApprovalModeBlock() {
         <SelectContent>
           <SelectItem value="always">Ask before every change</SelectItem>
           <SelectItem value="critical">Only critical steps</SelectItem>
+          <SelectItem value="trusted">Trust this workspace</SelectItem>
         </SelectContent>
       </Select>
     </SettingRow>

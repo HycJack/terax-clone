@@ -10,7 +10,11 @@ vi.mock("../lib/native", () => ({
   native: nativeMock,
 }));
 
-import { alwaysNeedsApproval, writeNeedsApproval } from "./approval";
+import {
+  alwaysNeedsApproval,
+  shellNeedsApproval,
+  writeNeedsApproval,
+} from "./approval";
 
 function norm(p: string): string {
   // Faithful-enough stand-in for the backend's filepath.Abs + EvalSymlinks:
@@ -70,6 +74,30 @@ describe("AI tool approval policy", () => {
     expect(await writeNeedsApproval(ctx, "/home/me/other/x.ts")).toBe(true);
     // ../ escapes the workspace.
     expect(await writeNeedsApproval(ctx, "../outside.ts")).toBe(true);
+  });
+
+  it("trusted mode auto-approves shell commands", () => {
+    usePreferencesStore.setState({ agentApprovalMode: "trusted" });
+    expect(shellNeedsApproval()).toBe(false);
+  });
+
+  it("critical and always modes still gate shell commands", () => {
+    usePreferencesStore.setState({ agentApprovalMode: "critical" });
+    expect(shellNeedsApproval()).toBe(true);
+    usePreferencesStore.setState({ agentApprovalMode: "always" });
+    expect(shellNeedsApproval()).toBe(true);
+  });
+
+  it("trusted mode auto-approves in-workspace writes", async () => {
+    usePreferencesStore.setState({ agentApprovalMode: "trusted" });
+    const ctx = makeContext("/workspace", "/workspace");
+    expect(await writeNeedsApproval(ctx, "src/a.ts")).toBe(false);
+  });
+
+  it("trusted mode still asks for out-of-workspace writes", async () => {
+    usePreferencesStore.setState({ agentApprovalMode: "trusted" });
+    const ctx = makeContext("/workspace", "/workspace");
+    expect(await writeNeedsApproval(ctx, "/home/me/other/x.ts")).toBe(true);
   });
 
   it("critical mode asks when a symlink resolves outside the workspace", async () => {

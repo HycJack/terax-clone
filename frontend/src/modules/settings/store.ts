@@ -226,8 +226,10 @@ export type AutocompleteTrigger = "auto" | "manual";
  *  mutating tool (edit/write/shell). "critical" auto-approves file edits that
  *  stay inside the current workspace and only asks for critical steps: shell
  *  execution, background processes, agent delegation, and edits outside the
- *  workspace. */
-export type AgentApprovalMode = "always" | "critical";
+ *  workspace. "trusted" additionally auto-approves shell commands, so the
+ *  agent runs hands-off inside the workspace; only out-of-workspace writes
+ *  and delegation still ask. */
+export type AgentApprovalMode = "always" | "critical" | "trusted";
 
 const KEY_AUTOCOMPLETE_ENABLED = "autocompleteEnabled";
 const KEY_AUTOCOMPLETE_TRIGGER = "autocompleteTrigger";
@@ -567,7 +569,7 @@ export async function loadPreferences(): Promise<Preferences> {
 }
 
 export function coerceAgentApprovalMode(v: unknown): AgentApprovalMode {
-  return v === "critical" ? "critical" : "always";
+  return v === "critical" || v === "trusted" ? v : "always";
 }
 
 export async function setAgentApprovalMode(value: AgentApprovalMode): Promise<void> {
