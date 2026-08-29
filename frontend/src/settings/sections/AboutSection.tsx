@@ -8,8 +8,8 @@ import { arch, platform } from "@/lib/wails/plugin-os";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../components/SectionHeader";
 
-const REPO_URL = "https://github.com/crynta/terax-ai";
-const WEBSITE = "https://terax.app";
+const REPO_URL = "https://github.com/HycJack/terax-clone";
+const WEBSITE = "https://github.com/HycJack/terax-clone";
 
 const PLATFORM_LABEL: Record<string, string> = {
   macos: "macOS",
@@ -90,7 +90,7 @@ export function AboutSection() {
         </dd>
 
         <dt className="text-muted-foreground">Bundle ID</dt>
-        <dd className="font-mono text-[11.5px]">app.crynta.terax</dd>
+        <dd className="font-mono text-[11.5px]">com.hycjack.terax</dd>
 
         <dt className="text-muted-foreground">License</dt>
         <dd>Apache 2.0</dd>
@@ -103,7 +103,7 @@ export function AboutSection() {
             className="inline-flex items-center gap-1.5 rounded-md text-[12px] underline-offset-2 hover:text-foreground hover:underline"
           >
             <HugeiconsIcon icon={GithubIcon} size={12} strokeWidth={1.75} />
-            crynta/terax-ai
+            HycJack/terax-clone
           </button>
         </dd>
         <dt className="text-muted-foreground">Website</dt>
