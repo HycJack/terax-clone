@@ -7,31 +7,37 @@
 package events
 
 import (
-	"context"
 	"fmt"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"terax/internal/secrets"
 	"terax/internal/store"
 )
 
+// emit is a helper to emit a custom event via the v3 event system.
+func emit(name string, data interface{}) {
+	if app := application.Get(); app != nil {
+		app.Event.Emit(name, data)
+	}
+}
+
 // RegisterAll attaches every event-bridge handler. Call once during startup.
-func RegisterAll(ctx context.Context) {
-	registerStoreHandlers(ctx)
-	registerSecretsHandlers(ctx)
+func RegisterAll(_ any) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	registerStoreHandlers(app)
+	registerSecretsHandlers(app)
 }
 
 // =========================================================================
 // Store handlers
 // =========================================================================
 
-func registerStoreHandlers(ctx context.Context) {
-	// store:load { path } → store:load:result
-	wailsruntime.EventsOn(ctx, "store:load", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		m, ok := args[0].(map[string]interface{})
+func registerStoreHandlers(app *application.App) {
+	app.Event.On("store:load", func(e *application.CustomEvent) {
+		m, ok := e.Data.(map[string]interface{})
 		if !ok {
 			return
 		}
@@ -41,24 +47,20 @@ func registerStoreHandlers(ctx context.Context) {
 		}
 		data, err := store.Load(store.LoadArgs{Path: path})
 		if err != nil {
-			wailsruntime.EventsEmit(ctx, "store:load:result", map[string]interface{}{
+			emit("store:load:result", map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
 			})
 			return
 		}
-		wailsruntime.EventsEmit(ctx, "store:load:result", map[string]interface{}{
+		emit("store:load:result", map[string]interface{}{
 			"success": true,
 			"data":    data,
 		})
 	})
 
-	// store:save { path, data } → store:save:result
-	wailsruntime.EventsOn(ctx, "store:save", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		m, ok := args[0].(map[string]interface{})
+	app.Event.On("store:save", func(e *application.CustomEvent) {
+		m, ok := e.Data.(map[string]interface{})
 		if !ok {
 			return
 		}
@@ -68,13 +70,13 @@ func registerStoreHandlers(ctx context.Context) {
 			return
 		}
 		if err := store.Save(store.SaveArgs{Path: path, Data: rawData}); err != nil {
-			wailsruntime.EventsEmit(ctx, "store:save:result", map[string]interface{}{
+			emit("store:save:result", map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
 			})
 			return
 		}
-		wailsruntime.EventsEmit(ctx, "store:save:result", map[string]interface{}{
+		emit("store:save:result", map[string]interface{}{
 			"success": true,
 		})
 	})
@@ -84,13 +86,9 @@ func registerStoreHandlers(ctx context.Context) {
 // Secrets handlers
 // =========================================================================
 
-func registerSecretsHandlers(ctx context.Context) {
-	// secrets:set { service, account, password } → secrets:set:result
-	wailsruntime.EventsOn(ctx, "secrets:set", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		m, ok := args[0].(map[string]interface{})
+func registerSecretsHandlers(app *application.App) {
+	app.Event.On("secrets:set", func(e *application.CustomEvent) {
+		m, ok := e.Data.(map[string]interface{})
 		if !ok {
 			return
 		}
@@ -102,24 +100,20 @@ func registerSecretsHandlers(ctx context.Context) {
 		}
 		applyService(service)
 		if err := secrets.Set(account, password); err != nil {
-			wailsruntime.LogError(ctx, fmt.Sprintf("secrets:set failed: %v", err))
-			wailsruntime.EventsEmit(ctx, "secrets:set:result", map[string]interface{}{
+			fmt.Printf("secrets:set failed: %v\n", err)
+			emit("secrets:set:result", map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
 			})
 			return
 		}
-		wailsruntime.EventsEmit(ctx, "secrets:set:result", map[string]interface{}{
+		emit("secrets:set:result", map[string]interface{}{
 			"success": true,
 		})
 	})
 
-	// secrets:get { service, account } → secrets:get:result
-	wailsruntime.EventsOn(ctx, "secrets:get", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		m, ok := args[0].(map[string]interface{})
+	app.Event.On("secrets:get", func(e *application.CustomEvent) {
+		m, ok := e.Data.(map[string]interface{})
 		if !ok {
 			return
 		}
@@ -131,26 +125,22 @@ func registerSecretsHandlers(ctx context.Context) {
 		applyService(service)
 		v, err := secrets.Get(account)
 		if err != nil {
-			wailsruntime.EventsEmit(ctx, "secrets:get:result", map[string]interface{}{
+			emit("secrets:get:result", map[string]interface{}{
 				"account": account,
 				"success": false,
 				"error":   err.Error(),
 			})
 			return
 		}
-		wailsruntime.EventsEmit(ctx, "secrets:get:result", map[string]interface{}{
+		emit("secrets:get:result", map[string]interface{}{
 			"account": account,
 			"success": true,
 			"value":   v,
 		})
 	})
 
-	// secrets:delete { service, account } → secrets:delete:result
-	wailsruntime.EventsOn(ctx, "secrets:delete", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		m, ok := args[0].(map[string]interface{})
+	app.Event.On("secrets:delete", func(e *application.CustomEvent) {
+		m, ok := e.Data.(map[string]interface{})
 		if !ok {
 			return
 		}
@@ -161,25 +151,21 @@ func registerSecretsHandlers(ctx context.Context) {
 		}
 		applyService(service)
 		if err := secrets.Delete(account); err != nil {
-			wailsruntime.EventsEmit(ctx, "secrets:delete:result", map[string]interface{}{
+			emit("secrets:delete:result", map[string]interface{}{
 				"account": account,
 				"success": false,
 				"error":   err.Error(),
 			})
 			return
 		}
-		wailsruntime.EventsEmit(ctx, "secrets:delete:result", map[string]interface{}{
+		emit("secrets:delete:result", map[string]interface{}{
 			"account": account,
 			"success": true,
 		})
 	})
 
-	// secrets:getAll { service, accounts } → secrets:getAll:result
-	wailsruntime.EventsOn(ctx, "secrets:getAll", func(args ...interface{}) {
-		if len(args) < 1 {
-			return
-		}
-		m, ok := args[0].(map[string]interface{})
+	app.Event.On("secrets:getAll", func(e *application.CustomEvent) {
+		m, ok := e.Data.(map[string]interface{})
 		if !ok {
 			return
 		}
@@ -197,7 +183,7 @@ func registerSecretsHandlers(ctx context.Context) {
 		applyService(service)
 		values, err := secrets.GetAll(accounts)
 		if err != nil {
-			wailsruntime.EventsEmit(ctx, "secrets:getAll:result", map[string]interface{}{
+			emit("secrets:getAll:result", map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
 			})
@@ -207,7 +193,7 @@ func registerSecretsHandlers(ctx context.Context) {
 		for i, v := range values {
 			out[i] = v
 		}
-		wailsruntime.EventsEmit(ctx, "secrets:getAll:result", map[string]interface{}{
+		emit("secrets:getAll:result", map[string]interface{}{
 			"success":  true,
 			"values":   out,
 			"accounts": accounts,

@@ -1,48 +1,81 @@
-// Runtime wrapper for `#wails/runtime/runtime`. Rolldown (Vite 8) treats
+// Runtime wrapper for `@wailsio/runtime`. Rolldown (Vite 8) treats
 // `.d.ts` files as type-only and won't allow value imports from them, so we
 // route value imports through this `.ts` file. TypeScript still resolves
 // the module via the d.ts for type checking.
-import * as r from "../../../wailsjs/runtime/runtime";
+//
+// CRITICAL: Wails v3 `Events.On` delivers a `WailsEvent` object `{name, data}`
+// to callbacks, but the existing codebase expects the raw event data directly.
+// The wrappers below unwrap WailsEvent automatically so all consumers work
+// without modification.
+import { Events, Browser, Window } from "@wailsio/runtime";
 
-export const EventsOn = r.EventsOn;
-export const EventsOff = r.EventsOff;
-export const EventsOnce = r.EventsOnce;
-export const EventsOnMultiple = r.EventsOnMultiple;
-export const EventsOffAll = r.EventsOffAll;
-export const EventsEmit = r.EventsEmit;
-export const BrowserOpenURL = r.BrowserOpenURL;
-export const LogPrint = r.LogPrint;
-export const LogTrace = r.LogTrace;
-export const LogDebug = r.LogDebug;
-export const LogInfo = r.LogInfo;
-export const LogWarning = r.LogWarning;
-export const LogError = r.LogError;
-export const LogFatal = r.LogFatal;
-export const WindowReload = r.WindowReload;
-export const WindowReloadApp = r.WindowReloadApp;
-export const WindowSetTitle = r.WindowSetTitle;
-export const WindowSetSize = r.WindowSetSize;
-export const WindowSetPosition = r.WindowSetPosition;
-export const WindowSetMinSize = r.WindowSetMinSize;
-export const WindowSetMaxSize = r.WindowSetMaxSize;
-export const WindowGetSize = r.WindowGetSize;
-export const WindowGetPosition = r.WindowGetPosition;
-// WindowGetScreenSize is not in Wails v2 runtime; alias to WindowGetSize.
-export const WindowGetScreenSize: typeof r.WindowGetSize = r.WindowGetSize;
-// WindowShowInactive is not in Wails v2 runtime; export it as a no-op alias
-// for WindowShow so any frontend imports stay type-safe.
-export const WindowMaximise = r.WindowMaximise;
-export const WindowToggleMaximise = r.WindowToggleMaximise;
-export const WindowUnmaximise = r.WindowUnmaximise;
-export const WindowIsMaximised = r.WindowIsMaximised;
-export const WindowIsMinimised = r.WindowIsMinimised;
-export const WindowIsFullscreen = r.WindowIsFullscreen;
-export const WindowIsNormal = r.WindowIsNormal;
-export const WindowFullscreen = r.WindowFullscreen;
-export const WindowUnfullscreen = r.WindowUnfullscreen;
-export const WindowMinimise = r.WindowMinimise;
-export const WindowUnminimise = r.WindowUnminimise;
-export const WindowHide = r.WindowHide;
-export const WindowShow = r.WindowShow;
-export const WindowShowInactive = r.WindowShow;
-export const WindowCenter = r.WindowCenter;
+// ── Helpers ────────────────────────────────────────────────────────────
+
+/** Unwrap a WailsEvent to its raw `.data` payload. */
+function unwrapWailsEvent(raw: unknown): unknown {
+  if (raw && typeof raw === "object" && "data" in (raw as object)) {
+    return (raw as Record<string, unknown>).data;
+  }
+  return raw;
+}
+
+// ── Events ─────────────────────────────────────────────────────────────
+
+/** Subscribe to an event. Callbacks receive the unwrapped data (not WailsEvent). */
+export function EventsOn(
+  name: string,
+  callback: (data: unknown) => void,
+): () => void {
+  return Events.On(name, (ev) => callback(unwrapWailsEvent(ev)));
+}
+
+export const EventsOff = Events.Off;
+
+export function EventsOnce(
+  name: string,
+  callback: (data: unknown) => void,
+): () => void {
+  return Events.Once(name, (ev) => callback(unwrapWailsEvent(ev)));
+}
+
+export function EventsOnMultiple(
+  name: string,
+  callback: (data: unknown) => void,
+  maxCallbacks: number,
+): () => void {
+  return Events.OnMultiple(name, (ev) => callback(unwrapWailsEvent(ev)), maxCallbacks);
+}
+
+export const EventsOffAll = Events.OffAll;
+export const EventsEmit = Events.Emit;
+
+// ── Browser ────────────────────────────────────────────────────────────
+
+export const BrowserOpenURL = Browser.OpenURL;
+
+// ── Window operations ──────────────────────────────────────────────────
+
+export const WindowReload = () => Window.Reload();
+export const WindowReloadApp = () => Window.ForceReload();
+export const WindowSetTitle = (title: string) => Window.SetTitle(title);
+export const WindowSetSize = (width: number, height: number) => Window.SetSize(width, height);
+export const WindowSetPosition = (x: number, y: number) => Window.SetPosition(x, y);
+export const WindowSetMinSize = (width: number, height: number) => Window.SetMinSize(width, height);
+export const WindowSetMaxSize = (width: number, height: number) => Window.SetMaxSize(width, height);
+export const WindowGetSize = () => Window.Size();
+export const WindowGetPosition = () => Window.Position();
+export const WindowMaximise = () => Window.Maximise();
+export const WindowToggleMaximise = () => Window.ToggleMaximise();
+export const WindowUnmaximise = () => Window.UnMaximise();
+export const WindowIsMaximised = () => Window.IsMaximised();
+export const WindowIsMinimised = () => Window.IsMinimised();
+export const WindowIsFullscreen = () => Window.IsFullscreen();
+export const WindowIsNormal = () => Window.Size().then(() => true).catch(() => false);
+export const WindowFullscreen = () => Window.Fullscreen();
+export const WindowUnfullscreen = () => Window.UnFullscreen();
+export const WindowMinimise = () => Window.Minimise();
+export const WindowUnminimise = () => Window.UnMinimise();
+export const WindowHide = () => Window.Hide();
+export const WindowShow = () => Window.Show();
+export const WindowShowInactive = () => Window.Show();
+export const WindowCenter = () => Window.Center();

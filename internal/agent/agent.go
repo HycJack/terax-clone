@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"terax/internal/types"
 )
 
@@ -17,12 +17,19 @@ var (
 	readyEvt = "terax:hooks-ready"
 )
 
+// emit is a helper to emit a custom event via the v3 event system.
+func emit(name string, data interface{}) {
+	if app := application.Get(); app != nil {
+		app.Event.Emit(name, data)
+	}
+}
+
 // EnableHooks flips the flag for a given agent and announces readiness.
-func EnableHooks(ctx context.Context, agent string) error {
+func EnableHooks(_ context.Context, agent string) error {
 	mu.Lock()
 	enabled[agent] = true
 	mu.Unlock()
-	wailsruntime.EventsEmit(ctx, readyEvt, types.AgentHooksReady{Agent: agent})
+	emit(readyEvt, types.AgentHooksReady{Agent: agent})
 	return nil
 }
 
@@ -34,6 +41,6 @@ func HooksStatus(agent string) types.AgentHooksStatus {
 }
 
 // EmitSignal pushes a signal to the frontend.
-func EmitSignal(ctx context.Context, sig types.AgentSignal) {
-	wailsruntime.EventsEmit(ctx, "terax:agent-signal", sig)
+func EmitSignal(_ context.Context, sig types.AgentSignal) {
+	emit("terax:agent-signal", sig)
 }

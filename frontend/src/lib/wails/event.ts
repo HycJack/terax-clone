@@ -1,18 +1,11 @@
 /**
  * Wails runtime wrapper: `@/lib/wails/event`.
- * Maps Tauri event names onto the Wails runtime event bus.
+ * Maps Tauri event names onto the Wails v3 runtime event bus.
  *
- * CRITICAL: Wails EventsEmit wraps extra args into a `data` array:
- *   EventsEmit("ev", {x:1}) → internal payload {name:"ev", data:[{x:1}]}
- *   notifyListeners then passes `data` (the array) to the callback.
- *
- * But Tauri's emit passes the payload directly — our listen shim must
- * unwrap the single-element array to keep existing Tauri consumers working.
- *
- * ALSO CRITICAL: Use Wails' per-listener unsubscribable returned by EventsOn
- * instead of calling EventsOff(name) which kills ALL listeners for that event.
+ * CRITICAL: Wails v3 `Events.On` delivers a `WailsEvent` object `{name, data}`
+ * to callbacks. This module unwraps it so consumers get the raw data directly.
  */
-import { EventsOff, EventsOn, EventsOnce } from "#wails/runtime/runtime";
+import { Events } from "@wailsio/runtime";
 
 export type UnlistenFn = () => void;
 export interface EventCallback<T> {
@@ -21,23 +14,27 @@ export interface EventCallback<T> {
 
 let listenSeq = 0;
 
-export { EventsOff };
+/** Unwrap a WailsEvent to its raw `.data` payload. */
+function unwrapWailsEvent(raw: unknown): unknown {
+  if (raw && typeof raw === "object" && "data" in (raw as object)) {
+    return (raw as Record<string, unknown>).data;
+  }
+  return raw;
+}
+
+export const EventsOff = Events.Off;
 
 /**
- * `listen(name, handler)` — subscribes to a Wails event. Wails doesn't expose
- * incrementing event ids, so we mint our own per-listener counter.
+ * `listen(name, handler)` — subscribes to a Wails event.
  */
 export async function listen<T = unknown>(
   name: string,
   handler: EventCallback<T>,
 ): Promise<UnlistenFn> {
   const id = ++listenSeq;
-  // Wails passes `data` which is the extra-args array from EventsEmit.
-  // Tauri emits with ONE extra arg (the payload), so the Wails array
-  // contains one element. Unwrap it: use data[0] as the Tauri payload.
-  const unsub = EventsOn(name, (data: unknown) => {
+  const unsub = Events.On(name, (ev) => {
     try {
-      const payload = (Array.isArray(data) && data.length === 1 ? data[0] : data) as T;
+      const payload = unwrapWailsEvent(ev) as T;
       handler({ event: name, id, payload });
     } catch (e) {
       console.error(`event handler for "${name}" threw:`, e);
@@ -50,9 +47,9 @@ export async function once<T = unknown>(
   name: string,
   handler: EventCallback<T>,
 ): Promise<UnlistenFn> {
-  const unsub = EventsOnce(name, (data: unknown) => {
+  const unsub = Events.Once(name, (ev) => {
     try {
-      const payload = (Array.isArray(data) && data.length === 1 ? data[0] : data) as T;
+      const payload = unwrapWailsEvent(ev) as T;
       handler({ event: name, id: 0, payload });
     } catch (e) {
       console.error(`event handler for "${name}" threw:`, e);
@@ -65,6 +62,5 @@ export async function emit(
   name: string,
   payload?: unknown,
 ): Promise<void> {
-  const { EventsEmit } = await import("#wails/runtime/runtime");
-  EventsEmit(name, payload);
+  Events.Emit(name, payload);
 }

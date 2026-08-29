@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"terax/internal/types"
 )
 
@@ -27,6 +27,13 @@ type AiHTTPRequestArgs = types.AiHttpRequestArgs
 
 // AiHTTPStreamArgs is the request body for AiHTTPStream.
 type AiHTTPStreamArgs = types.AiHttpStreamArgs
+
+// emit is a helper to emit a custom event via the v3 event system.
+func emit(name string, data interface{}) {
+	if app := application.Get(); app != nil {
+		app.Event.Emit(name, data)
+	}
+}
 
 // LmPing pings a local model endpoint with a short timeout. Returns the
 // HTTP status code (so the frontend can render Connected / Failed badges).
@@ -89,12 +96,12 @@ func AiHTTPStream(ctx context.Context, args types.AiHttpStreamArgs) error {
 		AllowPrivateNetwork: args.AllowPrivateNetwork,
 	})
 	if err != nil {
-		wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
+		emit(args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
 		return err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
+		emit(args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
 		return err
 	}
 	defer resp.Body.Close()
@@ -105,7 +112,7 @@ func AiHTTPStream(ctx context.Context, args types.AiHttpStreamArgs) error {
 			headers[k] = vs[0]
 		}
 	}
-	wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{
+	emit(args.OnEventEvent, types.AiStreamEvent{
 		Kind:    "headers",
 		Status:  resp.StatusCode,
 		Headers: headers,
@@ -113,11 +120,11 @@ func AiHTTPStream(ctx context.Context, args types.AiHttpStreamArgs) error {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1 MB cap on error body
-		wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{
+		emit(args.OnEventEvent, types.AiStreamEvent{
 			Kind:    "error",
 			Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)),
 		})
-		wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
+		emit(args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
@@ -127,15 +134,15 @@ func AiHTTPStream(ctx context.Context, args types.AiHttpStreamArgs) error {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
-			wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "chunk", Bytes: chunk})
+			emit(args.OnEventEvent, types.AiStreamEvent{Kind: "chunk", Bytes: chunk})
 		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
+				emit(args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
 				return nil
 			}
-			wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
-			wailsruntime.EventsEmit(ctx, args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
+			emit(args.OnEventEvent, types.AiStreamEvent{Kind: "error", Message: err.Error()})
+			emit(args.OnEventEvent, types.AiStreamEvent{Kind: "end"})
 			return err
 		}
 	}

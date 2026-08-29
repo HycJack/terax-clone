@@ -10,7 +10,6 @@ import {
 	ArrowLeft01Icon,
 	ArrowRight01Icon,
 	CommandIcon,
-	Settings01Icon,
 	SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -50,7 +49,6 @@ type Props = {
 	onOpenCommandPalette: () => void;
 	onActivateAgent: (tabId: number, leafId: number) => void;
 	onActivateLocalAgent: () => void;
-	onOpenSettings: () => void;
 	spaceSwitcher: ReactNode;
 	searchTarget: SearchTarget;
 	searchRef: RefObject<SearchInlineHandle | null>;
@@ -82,7 +80,6 @@ export function Header({
 	onOpenCommandPalette,
 	onActivateAgent,
 	onActivateLocalAgent,
-	onOpenSettings,
 	spaceSwitcher,
 	searchTarget,
 	searchRef,
@@ -103,18 +100,6 @@ export function Header({
 		ro.observe(el);
 		return () => ro.disconnect();
 	}, []);
-
-	const settingsButton = (
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			className="shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-			onClick={onOpenSettings}
-			aria-label="Settings"
-		>
-			<HugeiconsIcon icon={Settings01Icon} size={15} strokeWidth={1.75} />
-		</Button>
-	);
 
 	// Same interactive-element list as the `--wails-draggable: no-drag` CSS
 	// exclusions: double-clicks on controls must not zoom the window.
@@ -243,11 +228,8 @@ export function Header({
 						onActivate={onActivateAgent}
 						onActivateLocal={onActivateLocalAgent}
 					/>
-					{settingsButton}
 				</>
 			)}
-
-			{!IS_MAC && settingsButton}
 
 			{USE_CUSTOM_WINDOW_CONTROLS && (
 				<>

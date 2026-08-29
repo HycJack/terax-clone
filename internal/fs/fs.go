@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"terax/internal/sysproc"
 	"terax/internal/types"
 )
@@ -168,7 +168,9 @@ func (m *WatcherManager) pump() {
 			ctx := m.ctx
 			m.mu.Unlock()
 			if ctx != nil {
-				wailsruntime.EventsEmit(ctx, "fs:changed", paths)
+				if app := application.Get(); app != nil {
+					app.Event.Emit("fs:changed", paths)
+				}
 			}
 		case err, ok := <-m.watcher.Errors:
 			if !ok {

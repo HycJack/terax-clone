@@ -51,12 +51,8 @@ import type { PreviewPaneHandle } from "@/modules/preview";
 import { isSpreadsheetPath } from "@/modules/viewer";
 import {
 	openSettingsWindow,
-	registerSettingsDialog,
-	unregisterSettingsDialog,
-	type SettingsTab,
 } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { SettingsDialog } from "@/modules/settings/SettingsDialog";
 import {
 	shouldDisablePaneSwapShortcut,
 	type ShortcutHandlers,
@@ -69,6 +65,7 @@ import {
 	SidebarRail,
 	useSidebarPanel,
 } from "@/modules/sidebar";
+import { EventsOn, BrowserOpenURL } from "@/lib/wails/wails-runtime-stub";
 import {
 	SourceControlPanel,
 	useSourceControlContext,
@@ -736,6 +733,32 @@ export default function App() {
 		[activeId, splitActivePane],
 	);
 
+	// ── Menu event listeners ─────────────────────────────────────────────
+	useEffect(() => {
+		const unsubs: (() => void)[] = [];
+		const on = (name: string, fn: () => void) => {
+			unsubs.push(EventsOn(name, fn));
+		};
+		// File
+		on("menu:new-terminal", () => openNewTab());
+		on("menu:open-folder", () => openCommandPalette("commands"));
+		on("menu:settings", () => void openSettingsWindow());
+		// Edit
+		on("menu:find", () => openCommandPalette("content"));
+		// View
+		on("menu:toggle-sidebar", () => toggleSidebar());
+		on("menu:zen-mode", () => setZenMode((v) => !v));
+		// Terminal
+		on("menu:split-terminal", () => splitActivePaneInActiveTab("row"));
+		on("menu:kill-terminal", () => closeActivePane(activeId));
+		// Help
+		on("menu:open-docs", () => {
+			BrowserOpenURL("https://github.com/crynta/terax-ai#readme");
+		});
+		on("menu:about", () => void openSettingsWindow("about"));
+		return () => unsubs.forEach((u) => u());
+	}, [openNewTab, openCommandPalette, toggleSidebar, splitActivePaneInActiveTab, closeActivePane, activeId]);
+
 	const livePaneBounds = useCallback((tabId: number): PaneBounds[] => {
 		const tab = document.querySelector<HTMLElement>(
 			`[data-terminal-tab="${tabId}"]`,
@@ -768,20 +791,6 @@ export default function App() {
 	}, [activeId, closeActivePane, handleClose]);
 
 	const [zenMode, setZenMode] = useState(false);
-
-	// Settings dialog state (replaces separate settings.html page)
-	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(
-		undefined,
-	);
-
-	useEffect(() => {
-		registerSettingsDialog((tab) => {
-			setSettingsTab(tab);
-			setSettingsOpen(true);
-		});
-		return () => unregisterSettingsDialog();
-	}, []);
 
 	// Focus an agent's tab, switching to its space first so the header and tab
 	// strip don't end up showing a different space than the focused pane.
@@ -1289,124 +1298,123 @@ export default function App() {
 							onToggleSidebar={toggleSidebar}
 							onOpenCommandPalette={() => openCommandPalette("commands")}
 							onActivateAgent={onActivateAgent}
-							onActivateLocalAgent={onActivateLocalAgent}
-							onOpenSettings={() => void openSettingsWindow()}
-							spaceSwitcher={spaceSwitcher}
+						onActivateLocalAgent={onActivateLocalAgent}
+						spaceSwitcher={spaceSwitcher}
 							searchTarget={searchTarget}
 							searchRef={searchInlineRef}
 							onOverrideLanguage={setOverrideLanguage}
 							canGoBack={canGoBack}
 							canGoForward={canGoForward}
-							onNavigateHistory={handleNavHistory}
-						/>
+						onNavigateHistory={handleNavHistory}
+					/>
 					)}
 
 					<main className="zoom-content flex min-h-0 flex-1 flex-col">
 						<ResizablePanelGroup
-							orientation="horizontal"
-							className="min-h-0 flex-1"
-							onLayoutChanged={(_, { isUserInteraction }) => {
-								const width = sidebarRef.current?.getSize().inPixels ?? 0;
-								persistSidebarWidth(width, isUserInteraction);
-							}}
-						>
-							<ResizablePanel
-								id="sidebar"
-								panelRef={sidebarRef}
-								defaultSize={
-									initialSidebarCollapsed
-										? "0px"
-										: `${sidebarWidthRef.current}px`
-								}
-								minSize={`${SIDEBAR_MIN_WIDTH}px`}
-								maxSize={`${SIDEBAR_MAX_WIDTH}px`}
-								collapsible
-								collapsedSize={0}
-								onResize={(size) => {
-									persistSidebarCollapsed(size.inPixels <= 0);
+								orientation="horizontal"
+								className="min-h-0 flex-1"
+								onLayoutChanged={(_, { isUserInteraction }) => {
+									const width = sidebarRef.current?.getSize().inPixels ?? 0;
+									persistSidebarWidth(width, isUserInteraction);
 								}}
 							>
-								<div className="flex h-full min-h-0 flex-col border-r border-border/60 bg-card">
-									<div
-										key={sidebarView}
-										className="min-h-0 flex-1 terax-panel-in"
-									>
-										{sidebarView === "explorer" ? (
-											<FileExplorer
-												ref={explorerRef}
-												rootPath={explorerRoot}
-												gitStatus={
-													explorerGitDecorations ? sourceControl.status : null
-												}
-												activeFilePath={explorerActiveFilePath}
-												onOpenFile={handleOpenFile}
-												onPathRenamed={handlePathRenamed}
-												onPathDeleted={handlePathDeleted}
-												onRevealInTerminal={cdInNewTab}
-												onAttachToAgent={handleAttachFileToAgent}
-												onDropFile={handleOpenFile}
-												pathDropTarget={terminalPathDropTarget}
-											/>
-										) : (
-											<SourceControlPanel
-												open
-												sourceControl={sourceControl}
-												onOpenDiff={openGitDiffTab}
-												onOpenGitGraph={openGitGraphFromContext}
-												onOpenFile={handleOpenFile}
-												onNavigateToPath={cdInNewTab}
-											/>
-										)}
-									</div>
-									<SidebarRail
-										activeView={sidebarView}
-										onSelectView={persistSidebarView}
-										changedCount={sourceControl.changedCount}
-									/>
-								</div>
-							</ResizablePanel>
-							<ResizableHandle withHandle />
-							<ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
-								<div className="flex h-full min-h-0 flex-col">
-									<div className="relative min-h-0 flex-1">
-										<WorkspaceSurface
-											tabs={tabs}
-											activeId={activeId}
-											activeTab={activeTab}
-											registerTerminalHandle={registerTerminalHandle}
-											onSearchReady={handleSearchReady}
-											onCwd={handleTerminalCwd}
-											onExit={handleLeafExit}
-											onFocusLeaf={handleFocusLeaf}
-											registerEditorHandle={registerEditorHandle}
-											onEditorDirtyChange={handleEditorDirty}
-											onEditorCloseTab={disposeTab}
-											registerPreviewHandle={registerPreviewHandle}
-											onPreviewUrlChange={handlePreviewUrl}
-											onAiDiffAccept={(id) => respondToApproval(id, true)}
-											onAiDiffReject={(id) => respondToApproval(id, false)}
-											onOpenCommitFile={openCommitFileDiffTab}
-											onGitHistorySearchHandle={setGitHistoryHandle}
-											onSetMarkdownView={setMarkdownView}
-											onViewerOpenInEditor={(path) => openFileTab(path, true)}
+								<ResizablePanel
+									id="sidebar"
+									panelRef={sidebarRef}
+									defaultSize={
+										initialSidebarCollapsed
+											? "0px"
+											: `${sidebarWidthRef.current}px`
+									}
+									minSize={`${SIDEBAR_MIN_WIDTH}px`}
+									maxSize={`${SIDEBAR_MAX_WIDTH}px`}
+									collapsible
+									collapsedSize={0}
+									onResize={(size) => {
+										persistSidebarCollapsed(size.inPixels <= 0);
+									}}
+								>
+									<div className="flex h-full min-h-0 flex-col border-r border-border/60 bg-card">
+										<div
+											key={sidebarView}
+											className="min-h-0 flex-1 terax-panel-in"
+										>
+											{sidebarView === "explorer" ? (
+												<FileExplorer
+													ref={explorerRef}
+													rootPath={explorerRoot}
+													gitStatus={
+														explorerGitDecorations ? sourceControl.status : null
+													}
+													activeFilePath={explorerActiveFilePath}
+													onOpenFile={handleOpenFile}
+													onPathRenamed={handlePathRenamed}
+													onPathDeleted={handlePathDeleted}
+													onRevealInTerminal={cdInNewTab}
+													onAttachToAgent={handleAttachFileToAgent}
+													onDropFile={handleOpenFile}
+													pathDropTarget={terminalPathDropTarget}
+												/>
+											) : (
+												<SourceControlPanel
+													open
+													sourceControl={sourceControl}
+													onOpenDiff={openGitDiffTab}
+													onOpenGitGraph={openGitGraphFromContext}
+													onOpenFile={handleOpenFile}
+													onNavigateToPath={cdInNewTab}
+												/>
+											)}
+										</div>
+										<SidebarRail
+											activeView={sidebarView}
+											onSelectView={persistSidebarView}
+											changedCount={sourceControl.changedCount}
 										/>
 									</div>
+								</ResizablePanel>
+								<ResizableHandle withHandle />
+								<ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
+									<div className="flex h-full min-h-0 flex-col">
+										<div className="relative min-h-0 flex-1">
+											<WorkspaceSurface
+												tabs={tabs}
+												activeId={activeId}
+												activeTab={activeTab}
+												registerTerminalHandle={registerTerminalHandle}
+												onSearchReady={handleSearchReady}
+												onCwd={handleTerminalCwd}
+												onExit={handleLeafExit}
+												onFocusLeaf={handleFocusLeaf}
+												registerEditorHandle={registerEditorHandle}
+												onEditorDirtyChange={handleEditorDirty}
+												onEditorCloseTab={disposeTab}
+												registerPreviewHandle={registerPreviewHandle}
+												onPreviewUrlChange={handlePreviewUrl}
+												onAiDiffAccept={(id) => respondToApproval(id, true)}
+												onAiDiffReject={(id) => respondToApproval(id, false)}
+												onOpenCommitFile={openCommitFileDiffTab}
+												onGitHistorySearchHandle={setGitHistoryHandle}
+												onSetMarkdownView={setMarkdownView}
+												onViewerOpenInEditor={(path) => openFileTab(path, true)}
+											/>
+										</div>
 
-									<WorkspaceInputBar
-										isBlockTab={isBlockTab}
-										isTerminalTab={isTerminalTab}
-										activeLeafId={activeLeafId}
-										cwd={activeCwd}
-										home={home}
-										hasComposer={hasComposer}
-										panelOpen={panelOpen}
-										keysLoaded={keysLoaded}
-										onConnect={() => void openSettingsWindow("models")}
-									/>
-								</div>
-							</ResizablePanel>
-						</ResizablePanelGroup>
-					</main>
+										<WorkspaceInputBar
+											isBlockTab={isBlockTab}
+											isTerminalTab={isTerminalTab}
+											activeLeafId={activeLeafId}
+											cwd={activeCwd}
+											home={home}
+											hasComposer={hasComposer}
+											panelOpen={panelOpen}
+											keysLoaded={keysLoaded}
+											onConnect={() => void openSettingsWindow("models")}
+										/>
+									</div>
+								</ResizablePanel>
+					</ResizablePanelGroup>
+				</main>
 
 					{!zenMode && (
 						<StatusBar
@@ -1473,15 +1481,6 @@ export default function App() {
 						onOpenChange={setNewEditorOpen}
 						rootPath={explorerRoot ?? home}
 						onCreated={(path) => openFileTab(path)}
-					/>
-
-					<SettingsDialog
-						open={settingsOpen}
-						initialTab={settingsTab}
-						onOpenChange={(v) => {
-							setSettingsOpen(v);
-							if (!v) setSettingsTab(undefined);
-						}}
 					/>
 
 					{/* <UpdaterDialog /> */}

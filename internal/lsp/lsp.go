@@ -15,7 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"terax/internal/sysproc"
 	"terax/internal/types"
 )
@@ -220,7 +220,9 @@ func (s *Session) read(ctx context.Context, r io.Reader) {
 		if _, err := io.ReadFull(br, body); err != nil {
 			return
 		}
-		wailsruntime.EventsEmit(ctx, s.OnMessageEvent, body)
+		if app := application.Get(); app != nil {
+			app.Event.Emit(s.OnMessageEvent, body)
+		}
 	}
 }
 
@@ -235,7 +237,9 @@ func (s *Session) wait(ctx context.Context, stderrBuf *cappedBuffer) {
 		c := s.Command.ProcessState.ExitCode()
 		exit.Code = &c
 	}
-	wailsruntime.EventsEmit(ctx, s.OnExitEvent, exit)
+	if app := application.Get(); app != nil {
+		app.Event.Emit(s.OnExitEvent, exit)
+	}
 }
 
 func mergeEnv(extra map[string]string) []string {

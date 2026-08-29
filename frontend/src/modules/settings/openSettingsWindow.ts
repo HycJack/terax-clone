@@ -1,3 +1,5 @@
+import { OpenSettingsWindow } from "../../../bindings/terax/app";
+
 export type SettingsTab =
   | "general"
   | "editor"
@@ -7,9 +9,6 @@ export type SettingsTab =
   | "agents"
   | "about";
 
-// Keyed by SettingsTab so a "models" tab opened from a session survives a
-// restart — the user gets back to the same view. Falls back to "general"
-// for unknown / missing values.
 const SETTINGS_TAB_KEY = "terax:settings:lastTab";
 
 function rememberTab(tab: SettingsTab | undefined) {
@@ -21,26 +20,14 @@ function rememberTab(tab: SettingsTab | undefined) {
 }
 
 /**
- * Subscribable state for the in-app settings dialog.
- * Instead of navigating to a separate HTML page (which breaks window.go
- * in Wails v2), we open a dialog overlay in the main app context.
+ * Open settings in a new Wails v3 window.
  */
-let _resolveSettingsDialog: ((tab?: SettingsTab) => void) | null = null;
-
-export function registerSettingsDialog(
-  resolve: (tab?: SettingsTab) => void,
-): void {
-  _resolveSettingsDialog = resolve;
-}
-
-export function unregisterSettingsDialog(): void {
-  _resolveSettingsDialog = null;
-}
-
 export async function openSettingsWindow(tab?: SettingsTab): Promise<void> {
   rememberTab(tab);
-  if (_resolveSettingsDialog) {
-    _resolveSettingsDialog(tab);
+  try {
+    await OpenSettingsWindow({ tab: tab ?? null });
+  } catch (e) {
+    console.error("[terax] Failed to open settings window:", e);
   }
 }
 

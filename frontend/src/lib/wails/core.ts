@@ -1,12 +1,20 @@
 /**
- * Wails runtime wrapper: `@/lib/wails/core`.
+ * Wails v3 runtime wrapper: `@/lib/wails/core`.
  *
  * Bridges the existing Tauri command surface (`invoke`, `Channel`,
- * `convertFileSrc`) onto the Wails runtime. Frontend code that imports from
+ * `convertFileSrc`) onto the Wails v3 runtime. Frontend code that imports from
  * `@/lib/wails/core` is left untouched.
  */
-import { EventsOff, EventsOn } from "#wails/runtime/runtime";
-import * as App from "../../../wailsjs/go/main/App";
+import { Events } from "@wailsio/runtime";
+import * as AppBinding from "../../../bindings/terax/app";
+
+/** Unwrap a WailsEvent to its raw `.data` payload. */
+function unwrapWailsEvent(raw: unknown): unknown {
+  if (raw && typeof raw === "object" && "data" in (raw as object)) {
+    return (raw as Record<string, unknown>).data;
+  }
+  return raw;
+}
 
 // One counter is enough for channel/event-name uniqueness within a session.
 let channelSeq = 0;
@@ -35,15 +43,14 @@ export class Channel<T = unknown> {
   _attach(prefix: string): string {
     const name = `${prefix}:${this.eventName}`;
     this.attachedName = name;
-    EventsOn(name, (data: unknown) => {
+    Events.On(name, (ev) => {
       if (this.cancelled) return;
-      // Wails wraps EventsEmit extra args into a data array:
-      //   EventsEmit(ctx, name, b64) → JS callback receives [b64]
-      // Unwrap the first element.
-      const raw = Array.isArray(data) && data.length === 1 ? data[0] : data;
-      if (typeof raw === "string") {
+      // Wails v3 delivers a WailsEvent {name, data}; unwrap to get the raw data.
+      const data = unwrapWailsEvent(ev);
+      // Handle base64-encoded binary data (Channel pattern).
+      if (typeof data === "string") {
         try {
-          const bin = atob(raw);
+          const bin = atob(data);
           const bytes = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
           this.onmessage?.(bytes.buffer as T);
@@ -51,7 +58,7 @@ export class Channel<T = unknown> {
           console.error("[terax] Channel._attach: atob failed:", e);
         }
       } else {
-        this.onmessage?.(raw as T);
+        this.onmessage?.(data as T);
       }
     });
     return name;
@@ -62,7 +69,7 @@ export class Channel<T = unknown> {
     const name = eventName ?? this.attachedName;
     if (!name) return;
     try {
-      EventsOff(name);
+      Events.Off(name);
     } catch {
       /* ignore */
     }
@@ -70,10 +77,9 @@ export class Channel<T = unknown> {
 }
 
 /**
- * Look up a bound Go method by command name. Generated bindings live under
- * `wailsjs/go/main/App` (App struct) with PascalCase method names; the
- * frontend calls them using Tauri-style snake_case so we convert
- * `pty_open` → `PtyOpen` here.
+ * Look up a bound Go method by command name. Generated v3 bindings live under
+ * `bindings/terax/app.ts` with PascalCase method names; the frontend calls
+ * them using Tauri-style snake_case so we convert `pty_open` → `PtyOpen` here.
  */
 type AnyFn = (...args: unknown[]) => Promise<unknown>;
 
@@ -94,12 +100,6 @@ const snakeToPascal = (s: string) =>
   s
     .split("_")
     .map((seg) => {
-      // Preserve canonical PascalCase for initialism segments that the
-      // naive `s[0].toUpperCase()` translation would mishandle (FF, URL,
-      // PID, etc.). When a segment matches an abbreviation, the override
-      // replaces it entirely; any trailing characters after the matched
-      // prefix are preserved verbatim so mixed cases like `UrlStuff` still
-      // degrade gracefully.
       const lower = seg.toLowerCase();
       for (const [abbr, replacement] of Object.entries(SNAKE_PASCAL_OVERRIDES)) {
         if (lower === abbr) return replacement;
@@ -112,7 +112,7 @@ const snakeToPascal = (s: string) =>
     .join("");
 
 function resolveCommand(name: string): AnyFn | undefined {
-  const appMethods = App as unknown as Record<string, AnyFn>;
+  const appMethods = AppBinding as unknown as Record<string, AnyFn>;
   // Exact match first (handles PascalCase methods we may have added).
   if (typeof appMethods[name] === "function") return appMethods[name];
   // Fallback: snake_case → PascalCase.
@@ -194,11 +194,6 @@ const SINGLE_ARG: Record<string, string> = {
   // lsp
   lsp_detect: "command",
   lsp_kill: "id",
-  // NOTE: `git_resolve_repo` is a struct-arg command (`GitResolveRepoArgs{Cwd}`),
-  // not single-positional — keep it OUT of this map so the whole payload
-  // crosses the bridge intact.
-  // `workspace_authorize` is also a struct-arg command.
-  // `lsp_resolve_root` takes (path, []markers) — keep it OUT as well.
 };
 
 export type InvokeOptions = { headers?: Record<string, string> };
@@ -253,19 +248,6 @@ export async function invoke<T = unknown>(
   const singleKey = SINGLE_ARG[cmd];
   const callArg = singleKey !== undefined ? payload[singleKey] : payload;
 
-  // Check if window.go is available (it may be lost after page navigation
-  // in some Wails v2 configurations). If not, fall back to event-bridge.
-  const goAvailable = typeof window !== 'undefined' &&
-    typeof (window as unknown as Record<string, unknown>)['go'] !== 'undefined';
-
-  if (!goAvailable) {
-    try {
-      return (await invokeViaEventBridge<T>(cmd, payload)) as T;
-    } finally {
-      detachChannels(cmd, raw);
-    }
-  }
-
   try {
     return (await fn(callArg)) as T;
   } catch (e) {
@@ -273,58 +255,6 @@ export async function invoke<T = unknown>(
   } finally {
     detachChannels(cmd, raw);
   }
-}
-
-/**
- * Fallback: invoke a Go method via Wails EventsEmit + EventsOn.
- * Used when window.go is not available (settings page after navigation).
- * The Go backend must have registered corresponding event listeners.
- */
-async function invokeViaEventBridge<T>(
-  cmd: string,
-  args: Record<string, unknown>,
-): Promise<T> {
-  // Map known commands to their event name and result event name
-  const eventMap: Record<string, { req: string; res: string }> = {
-    secrets_set: { req: 'secrets:set', res: 'secrets:set:result' },
-    secrets_get: { req: 'secrets:get', res: 'secrets:get:result' },
-    secrets_delete: { req: 'secrets:delete', res: 'secrets:delete:result' },
-    secrets_get_all: { req: 'secrets:getAll', res: 'secrets:getAll:result' },
-    store_load: { req: 'store:load', res: 'store:load:result' },
-    store_save: { req: 'store:save', res: 'store:save:result' },
-  };
-
-  const mapping = eventMap[cmd];
-  if (!mapping) {
-    throw new Error(
-      `wails: cannot invoke "${cmd}" via event bridge (no mapping). ` +
-      'Try building with "wails build" instead of "wails dev".',
-    );
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    // Import runtime dynamically (same pattern as event.ts)
-    import('#wails/runtime/runtime').then(({ EventsEmit, EventsOn }) => {
-      const timeout = setTimeout(() => {
-        reject(new Error(`event bridge timeout for "${cmd}"`));
-      }, 10_000);
-
-      const unsub = EventsOn(mapping.res, (result: unknown) => {
-        clearTimeout(timeout);
-        unsub();
-        const r = result as Record<string, unknown>;
-        if (r && r['success'] === false) {
-          reject(new Error(String(r['error'] ?? 'unknown error')));
-        } else {
-          resolve(r as T);
-        }
-      });
-
-      EventsEmit(mapping.req, args);
-    }).catch((err) => {
-      reject(new Error(`event bridge runtime import failed: ${err}`));
-    });
-  });
 }
 
 /**

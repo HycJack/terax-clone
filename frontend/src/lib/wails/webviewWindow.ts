@@ -4,16 +4,16 @@
  * `getCurrentWebviewWindow()` returns the same window object.
  */
 import { Window } from "./window";
+import { Events } from "@wailsio/runtime";
 
 export class WebviewWindow extends Window {
   async listen<T = unknown>(
     name: string,
     handler: (event: { event: string; payload: T }) => void,
   ): Promise<() => void> {
-    const { EventsOn } = await import("#wails/runtime/runtime");
-    const unsub = EventsOn(name, (payload: T) => {
+    const unsub = Events.On(name, (ev) => {
       try {
-        handler({ event: name, payload });
+        handler({ event: name, payload: ev.data as T });
       } catch (e) {
         console.error(`webviewWindow listen(${name}) handler threw:`, e);
       }
@@ -22,8 +22,7 @@ export class WebviewWindow extends Window {
   }
 
   async emit(name: string, payload?: unknown): Promise<void> {
-    const { EventsEmit } = await import("#wails/runtime/runtime");
-    EventsEmit(name, payload);
+    Events.Emit(name, payload);
   }
 
   /** Tauri-only API: re-focuses the webview. Wails v2 lacks an equivalent;

@@ -7,15 +7,21 @@ package winctrl
 import (
 	"context"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Register wires the custom-chrome event hooks. Call once during startup.
-func Register(ctx context.Context) {
-	wailsruntime.EventsOn(ctx, "wails:close", func(_ ...interface{}) {
-		wailsruntime.Quit(ctx)
+func Register(_ context.Context) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	app.Event.On("wails:close", func(_ *application.CustomEvent) {
+		app.Quit()
 	})
-	wailsruntime.EventsOn(ctx, "wails:minimise", func(_ ...interface{}) {
-		wailsruntime.WindowMinimise(ctx)
+	app.Event.On("wails:minimise", func(_ *application.CustomEvent) {
+		if w := app.Window.Current(); w != nil {
+			w.Minimise()
+		}
 	})
 }

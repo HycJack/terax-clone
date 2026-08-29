@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,18 +19,22 @@ import (
 	"terax/internal/fs"
 	"terax/internal/git"
 	"terax/internal/lsp"
+	"terax/internal/mcp"
 	internalpty "terax/internal/pty"
 	internalshell "terax/internal/shell"
 	internaltype "terax/internal/types"
 	"terax/internal/winctrl"
 	"terax/internal/workspace"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // App is the Wails-bound struct.
 type App struct {
 	ctx       context.Context
+	app       *application.App
+	wailsApp  *application.App
+	mainWindow application.Window
 	ptyMgr    *internalpty.Manager
 	fsWatcher *fs.WatcherManager
 	lspMgr    *lsp.Manager
@@ -49,9 +54,10 @@ func NewApp() *App {
 	}
 }
 
-// startup is called by Wails before the webview loads.
-func (a *App) startup(ctx context.Context) {
+// ServiceStartup is called by Wails v3 during application startup.
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
+	a.app = application.Get()
 	a.fsWatcher.BindContext(ctx)
 
 	// Initialize per-user data dirs.
@@ -73,10 +79,12 @@ func (a *App) startup(ctx context.Context) {
 
 	// Event-bridge for settings page: store/secrets ops via EventsEmit/EventsOn.
 	events.RegisterAll(ctx)
+
+	return nil
 }
 
 // shutdown is called when the app is exiting.
-func (a *App) shutdown(_ context.Context) {
+func (a *App) shutdown() {
 	if a.ptyMgr != nil {
 		a.ptyMgr.CloseAll()
 	}
@@ -87,12 +95,6 @@ func (a *App) shutdown(_ context.Context) {
 		a.fsWatcher.Close()
 	}
 }
-
-// onSecondInstanceLaunch handles the launch dir from CLI args.
-func (a *App) onSecondInstanceLaunch(_ context.Context) {}
-
-// domReady runs after the page has loaded.
-func (a *App) domReady(ctx context.Context) {}
 
 // =========================================================================
 // Launch dir / files (matches Tauri's `LaunchDir` state)
@@ -817,7 +819,7 @@ func (a *App) WorkspaceSetCwd(args WorkspaceSetCwdArgs) error {
 // chosen path (empty string if the user cancelled). The picked directory
 // is also authorised so the file explorer can browse it without a prompt.
 func (a *App) WorkspacePickDirectory() (string, error) {
-	if a.ctx == nil {
+	if a.app == nil {
 		return "", errors.New("app not initialised")
 	}
 	// Seed the picker with the workspace cwd or the home directory so the
@@ -828,11 +830,10 @@ func (a *App) WorkspacePickDirectory() (string, error) {
 			defaultDir = h
 		}
 	}
-	opts := wailsruntime.OpenDialogOptions{
-		Title:            "Select project directory",
-		DefaultDirectory: defaultDir,
-	}
-	path, err := wailsruntime.OpenDirectoryDialog(a.ctx, opts)
+	path, err := a.app.Dialog.OpenFile().
+		SetTitle("Select project directory").
+		SetDirectory(defaultDir).
+		PromptForSingleSelection()
 	if err != nil {
 		return "", err
 	}
@@ -843,8 +844,9 @@ func (a *App) WorkspacePickDirectory() (string, error) {
 		// Switch the global cwd to the picked directory so subsequent
 		// relative path resolutions land in the new project root.
 		_ = workspace.SetCwd(path)
+		return path, nil
 	}
-	return path, nil
+	return "", nil
 }
 
 // =========================================================================
@@ -1025,7 +1027,9 @@ type ProcessExitArgs struct {
 
 // ProcessExit terminates the app.
 func (a *App) ProcessExit(args ProcessExitArgs) {
-	wailsruntime.Quit(a.ctx)
+	if a.app != nil {
+		a.app.Quit()
+	}
 }
 
 // AutostartEnable enables OS-level autostart.
@@ -1097,16 +1101,45 @@ type OpenSettingsWindowArgs struct {
 	Tab *string `json:"tab"`
 }
 
-// OpenSettingsWindow navigates the current window to the settings page.
-// Wails v2 doesn't easily spawn child windows from JS, so we just
-// navigate to /settings within the existing window — the frontend
-// already wraps the settings in a separate route.
+// OpenSettingsWindow opens the settings page in a new window.
+// If the settings window already exists, it is focused instead.
 func (a *App) OpenSettingsWindow(args OpenSettingsWindowArgs) error {
 	tab := ""
 	if args.Tab != nil {
 		tab = *args.Tab
 	}
-	wailsruntime.EventsEmit(a.ctx, "terax:settings-tab", tab)
+
+	// If settings window already exists, focus it and switch tab via event
+	if a.app != nil {
+		if w, ok := a.app.Window.GetByName("settings"); ok {
+			w.Focus()
+			a.app.Event.Emit("terax:settings-tab", tab)
+			return nil
+		}
+	}
+
+	// Create a new settings window
+	if a.app != nil {
+		url := "settings.html"
+		if tab != "" {
+			url = "settings.html?tab=" + tab
+		}
+		a.app.Window.NewWithOptions(application.WebviewWindowOptions{
+			Name:  "settings",
+			Title: "Terax Settings",
+			URL:   url,
+			Width: 800,
+			Height: 600,
+			Mac: application.MacWindow{
+				TitleBar: application.MacTitleBar{
+					AppearsTransparent: true,
+					FullSizeContent:    true,
+					HideTitle:          true,
+				},
+			},
+			BackgroundColour: application.NewRGBA(27, 38, 54, 1),
+		})
+	}
 	return nil
 }
 
@@ -1142,4 +1175,78 @@ func (a *App) AppHomeDir() string {
 		return h
 	}
 	return ""
+}
+
+// ── Multi-window helpers ───────────────────────────────────────────────
+
+// WindowNew creates a new application window.
+func (a *App) WindowNew(title string, width, height int) {
+	a.wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  title,
+		Width:  width,
+		Height: height,
+		BackgroundColour: application.NewRGBA(27, 38, 54, 1),
+	})
+}
+
+// WindowGetAll returns the titles of all open windows.
+func (a *App) WindowGetAll() []string {
+	windows := a.wailsApp.Window.GetAll()
+	names := make([]string, 0, len(windows))
+	for _, w := range windows {
+		names = append(names, w.Name())
+	}
+	return names
+}
+
+// WindowClose closes the window with the given name.
+func (a *App) WindowClose(name string) {
+	if w, ok := a.wailsApp.Window.GetByName(name); ok {
+		w.Close()
+	}
+}
+
+// WindowFocus brings the named window to focus.
+func (a *App) WindowFocus(name string) {
+	if w, ok := a.wailsApp.Window.GetByName(name); ok {
+		w.Focus()
+	}
+}
+
+// ── Application info ───────────────────────────────────────────────────
+
+// AppVersion returns the application version.
+func (a *App) AppVersion() string {
+	return "0.8.6"
+}
+
+// AppName returns the application name.
+func (a *App) AppName() string {
+	return "terax"
+}
+
+// ── MCP Server ─────────────────────────────────────────────────────────
+
+// McpListTools returns the list of available MCP tools.
+func (a *App) McpListTools() []map[string]any {
+	srv := mcp.NewServer()
+	tools := make([]map[string]any, 0, len(srv.Tools()))
+	for _, t := range srv.Tools() {
+		tools = append(tools, map[string]any{
+			"name":        t.Name,
+			"description": t.Description,
+			"inputSchema": t.InputSchema,
+		})
+	}
+	return tools
+}
+
+// McpCallTool calls an MCP tool by name with the given arguments.
+func (a *App) McpCallTool(name string, args map[string]any) (any, error) {
+	srv := mcp.NewServer()
+	b, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	return srv.CallTool(a.ctx, name, json.RawMessage(b))
 }

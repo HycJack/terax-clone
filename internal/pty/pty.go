@@ -30,7 +30,7 @@ import (
 	"syscall"
 
 	gopty "github.com/aymanbagabas/go-pty"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Session is a single PTY instance.
@@ -52,10 +52,10 @@ type Session struct {
 	proc      childProc
 	procState childState
 
-	// emitEvent is a stored reference to wailsruntime.EventsEmit, stored
-	// at session creation so pump goroutines always use the same function
-	// regardless of context validity after HMR.
-	emitEvent func(ctx context.Context, event string, optionalData ...interface{})
+	// emitEvent is a stored callback for forwarding PTY output to the frontend.
+	// The callback receives the event name and data; the implementation is
+	// provided by the App at session creation time via the v3 event system.
+	emitEvent func(event string, data interface{})
 
 	mu      sync.Mutex
 	closed  atomic.Bool
@@ -167,7 +167,11 @@ func (m *Manager) Open(
 	m.sessions[id] = sess
 	m.mu.Unlock()
 
-	sess.emitEvent = wailsruntime.EventsEmit
+	sess.emitEvent = func(event string, data interface{}) {
+		if app := application.Get(); app != nil {
+			app.Event.Emit(event, data)
+		}
+	}
 	// Never pump here. `Start` launches the pump only after the frontend
 	// has subscribed to `pty:<id>`, so early shell output (banner + first
 	// prompt + OSC 7/133 markers that sync the directory tree) can't race
@@ -371,7 +375,7 @@ func (s *Session) pump(ctx context.Context) {
 			copy(payload, buf[:n])
 			b64 := base64.StdEncoding.EncodeToString(payload)
 			if s.emitEvent != nil {
-				s.emitEvent(ctx, dataEvent, map[string]string{"data": b64})
+				s.emitEvent(dataEvent, map[string]string{"data": b64})
 			}
 		}
 		if err != nil {
@@ -385,7 +389,7 @@ func (s *Session) waitAndExit(ctx context.Context, exitEvent string) {
 	_ = s.proc.Wait()
 	code := s.procState.ExitCode()
 	if s.emitEvent != nil {
-		s.emitEvent(ctx, exitEvent, code)
+		s.emitEvent(exitEvent, code)
 	}
 }
 
