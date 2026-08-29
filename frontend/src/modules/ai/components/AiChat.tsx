@@ -217,7 +217,25 @@ export function AiChatView({
           <ConversationEmptyState
             title="Ask Terax anything"
             description="Explain command output, fix errors, generate snippets, or run a task."
-          />
+          >
+            <div className="mt-2 flex flex-col gap-1.5">
+              {[
+                "Explain the last terminal output",
+                "Fix the error in my code",
+                "Generate a unit test for this function",
+                "What does this command do?",
+              ].map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => void sendMessage(prompt)}
+                  className="rounded-md border border-border/50 bg-muted/30 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </ConversationEmptyState>
         </ConversationContent>
       </Conversation>
     );
