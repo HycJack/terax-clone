@@ -19,6 +19,9 @@
 # under frontend/dist are NOT committed — they're rebuild artifacts.
 /frontend/dist/
 
+# Task runner cache
+.task/
+
 # ===== Node / Frontend =====
 node_modules/
 /frontend/node_modules/

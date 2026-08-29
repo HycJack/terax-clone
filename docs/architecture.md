@@ -8,7 +8,7 @@
 
 ## 1. 项目概览
 
-Terax 是一款跨平台桌面终端 + AI 编码助手，技术栈为 **Wails v2（Go + React/TypeScript + Vite）**。
+Terax 是一款跨平台桌面终端 + AI 编码助手，技术栈为 **Wails v3（Go + React/TypeScript + Vite）**。
 
 核心能力：
 
@@ -19,22 +19,29 @@ Terax 是一款跨平台桌面终端 + AI 编码助手，技术栈为 **Wails v2
 - **LSP 集成**：JSON-RPC over stdin/stdout，语言智能（查看定义、引用等）
 - **工作区管理**：目录授权 + WSL 分发版支持
 - **密钥管理**：系统 keyring（Windows Credential Manager / macOS Keychain / Linux Secret Service）
+- **系统托盘**：最小化到托盘，快速显示/隐藏
+- **多窗口**：原生 OS 窗口管理
+- **应用菜单栏**：全功能键盘快捷键
 
 ### 1.1 启动流程
 
 ```
-main.go  wails.Run(...)
-   │  Frameless: true（无原生标题栏，前端自绘）
-   ├─ OnStartup → app.startup(ctx)
-   │     · a.ctx = ctx
-   │     · a.fsWatcher.BindContext(ctx)
-   │     · appDir() 建目录 → storeInit / historyInit
-   │     · workspace.InitLaunchCwd(home)   // 并自动授权 home
-   │     · winctrl.Register(ctx)           // 自定义标题栏按钮
-   │     · events.RegisterAll(ctx)         // 设置页事件桥
-   ├─ OnShutdown → app.shutdown()
-   │     · ptyMgr.CloseAll() / lspMgr.KillAll() / fsWatcher.Close()
-   └─ Bind: [ &app ]                        // 绑定 App 结构体的所有导出方法
+main.go  application.New(...)
+   │  application.NewWindow(...) → mainWindow
+   │  application.SystemTray.New(...) → tray
+   │  buildAppMenu(wailsApp) → menu
+   ├─ Services: []application.Service{application.NewService(app)}
+   │     · app.ServiceStartup(ctx, opts)
+   │       · a.ctx = ctx
+   │       · a.fsWatcher.BindContext(ctx)
+   │       · appDir() 建目录 → storeInit / historyInit
+   │       · workspace.InitLaunchCwd(home)
+   │       · winctrl.Register(ctx)
+   │       · events.RegisterAll(ctx)
+   │       · events.RegisterMcp(ctx, app)  // MCP Server (JSON-RPC 2.0)
+   │     · app.OnShutdown → app.shutdown()
+   │       · ptyMgr.CloseAll() / lspMgr.KillAll() / fsWatcher.Close()
+   └─ Window creation with WebviewWindowOptions (URL, title, size, background)
 ```
 
 ---
@@ -43,17 +50,20 @@ main.go  wails.Run(...)
 
 ```
 terax/
-├── main.go          # 入口：wails.Run 配置（标题、尺寸、Frameless、AssetServer、生命周期回调）
-├── app.go           # App 结构体 —— 绑定给 Wails 的所有导出方法（命令转发中心）
+├── main.go          # 入口：Wails v3 app 配置（窗口、菜单、托盘、生命周期）
+├── app.go           # App 结构体 —— Wails v3 Service 绑定（命令转发中心）
 ├── helpers.go       # 顶层辅助函数（store/secrets/net/history/autostart/opener 等转发）
-├── wails.json       # Wails 项目配置（前端命令、DevServer 地址等）
+├── localfile.go     # 本地文件服务（/local-file/ 路径拦截）
+├── Taskfile.yml     # 构建任务（pnpm + wails3）
+├── wails.json       # Wails v3 项目配置
 ├── internal/
 │   ├── agent/       # AI Agent hooks 就绪状态 + 信号事件
-│   ├── events/      # 设置页事件桥（Settings 页面导航后 window.go 丢失时的兜底通道）
+│   ├── events/      # 设置页事件桥 + MCP Server (JSON-RPC 2.0)
 │   ├── fs/          # 文件系统：读写、目录、搜索、grep、glob、fsnotify 监听
 │   ├── git/         # Git CLI 封装：status/diff/stage/commit/log/branch/push/fetch
 │   ├── history/     # 命令历史（内存缓存 + 每行一条的持久化文件）
 │   ├── lsp/         # LSP 会话管理：spawn/send/kill、Content-Length 分帧
+│   ├── mcp/         # MCP Server：JSON-RPC 2.0 over stdio
 │   ├── net/         # AI HTTP 客户端：流式代理、SSRF 防护、LM 健康检查
 │   ├── pty/         # 伪终端：ConPTY(Windows)/openpty(Unix)/旧版管道回退
 │   ├── secrets/     # 系统 keyring 封装
@@ -61,16 +71,17 @@ terax/
 │   ├── store/       # LazyStore JSON 持久化（带路径穿越防护）
 │   ├── sysproc/     # 跨平台进程辅助（隐藏窗口、进程树击杀）
 │   ├── types/       # 共享数据结构（与前端 TS 类型一一对应）
-│   ├── winctrl/     # 自定义窗口标题栏按钮（close/minimise）
+│   ├── winctrl/     # 窗口控制事件处理（v3 events）
 │   └── workspace/   # 目录授权注册表、当前 cwd、WSL 分发版
 ├── frontend/
+│   ├── bindings/    # 自动生成的 Wails v3 TypeScript 绑定
 │   └── src/
-│       ├── lib/wails/core.ts   # ★ 桥梁层：Tauri 风格 invoke → Wails 绑定
-│       ├── wailsjs/            # Wails 生成的绑定（go/main/App）
+│       ├── lib/wails/core.ts   # ★ 桥梁层：Tauri 风格 invoke → Wails v3 绑定
 │       ├── modules/            # 功能模块（ai/terminal/explorer/source-control/lsp/...）
 │       ├── settings/           # 设置页（独立路由）
 │       ├── app/ components/    # 全局组件
 │       └── styles/ main.tsx    # 入口
+├── build/           # 构建资源（图标、appicon.png）
 └── docs/
     ├── architecture.md          # 本文档
     └── definition-and-references.md  # LSP「查看定义/引用」特性设计
@@ -80,8 +91,9 @@ terax/
 
 ## 3. 前后端通信（核心桥梁 `@/lib/wails/core`）
 
-前端面向 **Tauri 式的命令面**（snake_case 命令名 + `invoke` + `Channel`），后端是 **Wails
-绑定**（PascalCase 方法名 + 结构体参数）。`core.ts` 完成翻译。
+Wails v3 使用 `@wailsio/runtime@3.0.0-beta.15`，前端面向 **Tauri 式的命令面**（snake_case 命令名 + `invoke` + `Channel`），
+后端是 **Wails v3 绑定**（PascalCase 方法名 + 结构体参数 + `$Call.ByID(numericHash, args)`）。
+`core.ts` 完成翻译。
 
 ### 3.1 命令解析流程
 
@@ -95,8 +107,7 @@ invoke("pty_open", args)
    │ 4. SINGLE_ARG[cmd] ？ → 只从载荷中提取单个字段当参数
    │      （如 fs_canonicalize:"path"、pty_close:"id"）
    │     否则：把整个 payload 作为结构体参数
-   │ 5. 若当前页面 window.go 可用 → 直接调用生成的绑定方法
-   │     否则（设置页导航后）→ 退化为 EventsEmit/EventsOn 事件桥
+   │ 5. 通过 generated bindings 调用 `$Call.ByID(numericHash, args)`
 ```
 
 ### 3.2 Channel 处理（`SPECIAL` 表）
@@ -112,20 +123,20 @@ invoke("pty_open", args)
 
 ### 3.3 事件总线（非请求/响应）
 
-- **PTY 输出**：Go 端 pump 每次读到数据 → `EventsEmit("pty:<id>", {data: "<base64>"})`
+Wails v3 事件 API：`app.Event.Emit(name, data)` / `app.Event.On(name, cb)`。
+前端 `EventsOn`/`EventsOnce` 自动解包 `WailsEvent` wrapper。
+
+- **PTY 输出**：Go 端 pump 每次读到数据 → `app.Event.Emit("pty:<id>", {data: "<base64>"})`
   - 前端订阅 `pty:<id>` 与 `pty:exit:<id>`，base64 解码后喂给 xterm。
-  - ⚠️ Wails 事件总线**无缓冲**，所以 `pty-bridge.ts` 遵循：
-    **先 `pty_open` 拿到 id → 再订阅事件 → 最后 `pty_start` 启动 pump**，
-    否则启动时 banner/prompt 会丢失。
-- **文件变更**：fsnotify 监听 → 合并 50ms 突发 → `EventsEmit("fs:changed", paths)`
+- **文件变更**：fsnotify 监听 → 合并 50ms 突发 → `app.Event.Emit("fs:changed", paths)`
 - **Agent 信号**：`terax:agent-signal`
+- **菜单事件**：`menu:new-terminal`、`menu:open-folder`、`menu:settings` 等
 - **设置页事件桥**：`store:load/save`、`secrets:set/get/delete/getAll` 及各自的 `:result`
 
 ### 3.4 设置页的特殊性
 
-设置页通过 `window.location` 导航，会销毁 `window['go']`，生成的绑定失效。
-因此 `core.ts` 提供 `invokeViaEventBridge` 兜底：已知命令 → `{req/res}` 事件名映射，
-用 EventsEmit 发请求、EventsOn 收结果（10s 超时）。Go 端由 `internal/events` 注册这些处理器。
+设置页通过新窗口 `settings.html?tab=...` 打开，不再导航销毁绑定。
+`openSettingsWindow.ts` 调用 Go IPC `OpenSettingsWindow` 创建新窗口或聚焦已有窗口。
 
 ---
 
@@ -217,9 +228,9 @@ invoke("pty_open", args)
 - **`secrets`**：`go-keyring`，按 `(service, account)` 存取；`SetService` 切换服务名。
 - **`store`**：JSON 包写盘为 `<path>.json`，**拒绝 `..`/分隔符**再做 Abs 前缀校验，原子写（tmp + rename）。
 - **`history`**：内存缓存 + 每行一条文件持久化；去重、前缀/模糊建议。
-- **`winctrl`**：`wails:close` / `wails:minimise` 事件 → 原生窗口操作。
+- **`winctrl`**：v3 events 事件处理（close/minimise/maximise/unmaximise/unminimise/fullscreen/force-reload）。
 - **`agent`**：内存 `enabled` 标志 + `terax:hooks-ready` / `terax:agent-signal` 事件。
-- **`events`**：设置页用的 store/secrets 事件桥处理器。
+- **`events`**：设置页用的 store/secrets 事件桥处理器 + MCP Server (JSON-RPC 2.0 over stdio)。
 
 ---
 
@@ -255,10 +266,6 @@ invoke("pty_open", args)
 ## 8. 已知设计取舍与待清理项
 
 - `pty` 与 `shell` 职责重叠（都能跑进程/会话），边界可合并。
-- `app.go` 体量较大（~1160 行），含若干 dead code 占位：
-  `shellEmptyPty`、`intStr`、`GetLaunchFiles`、`PtyReadOutput`(no-op)、`pty_read_output` 绑定、
-  空 `cmd/` 目录、`helpers.go` 里 `var _ =` 保 import 语句。
 - `helpers.go:autostartSet` / `workspace.WSL*` 通过 `exec.Command` 调系统命令，无 shell 展开故无注入风险。
 - `ProcessExit` 忽略传入的 `Code`。
 - `FsGrepInteractive` 与 `FsGrep` 等价（流式版本为已知简化）。
-- `wails.json` 曾有重复的 `frontend:dev:serverUrl` 键（已被整理）。

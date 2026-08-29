@@ -753,7 +753,7 @@ export default function App() {
 		on("menu:kill-terminal", () => closeActivePane(activeId));
 		// Help
 		on("menu:open-docs", () => {
-			BrowserOpenURL("https://github.com/crynta/terax-ai#readme");
+			BrowserOpenURL("https://github.com/HycJack/terax-clone#readme");
 		});
 		on("menu:about", () => void openSettingsWindow("about"));
 		return () => unsubs.forEach((u) => u());

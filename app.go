@@ -1132,9 +1132,10 @@ func (a *App) OpenSettingsWindow(args OpenSettingsWindowArgs) error {
 			Height: 600,
 			Mac: application.MacWindow{
 				TitleBar: application.MacTitleBar{
-					AppearsTransparent: true,
-					FullSizeContent:    true,
-					HideTitle:          true,
+					AppearsTransparent:   true,
+					FullSizeContent:      true,
+					HideTitle:            true,
+					HideToolbarSeparator: true,
 				},
 			},
 			BackgroundColour: application.NewRGBA(27, 38, 54, 1),
