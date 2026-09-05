@@ -573,8 +573,7 @@ function ModelRow({
 }) {
   return (
     <DropdownMenuItem
-      onSelect={(e) => {
-        e.preventDefault();
+      onSelect={() => {
         onPick();
       }}
       className={cn(
